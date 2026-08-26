@@ -98,6 +98,8 @@
   .icon-opt{font-size:20px;padding:7px;border:1px solid var(--line);border-radius:9px;background:var(--surface);cursor:pointer;text-align:center;}
   .icon-opt:hover{border-color:var(--teal);background:var(--tint2);}
   .icon-opt.on{border:2px solid var(--teal);background:var(--tint);}
+  .plan-amt{color:var(--ink3);background:var(--raise);}
+  .plan-amt:focus{color:var(--ink);}
   .row-del:hover{color:var(--over);}
   .hint{font-size:12px;padding:7px 11px;border-radius:8px;margin-top:10px;display:inline-block;}
   .hint-ok{background:var(--tint);color:var(--teal-ink);} .hint-warn{background:var(--warn-tint);color:var(--warn-ink);} .hint-over{background:var(--danger-tint);color:var(--danger-ink);}
@@ -168,7 +170,7 @@
   var KEY="nuvia_full_v1";
   var WEDDING={name:"Luis Pablo & Daniela", date:"2027-07-03", meta:395000};
   var CATICON={venue:"🏛️",planning:"📋",musica:"🎵",foto:"📷",video:"🎬",deco:"🎨",licor:"🍷",pastel:"🎂",argollas:"💍"};
-  var PLAN_LABELS={cuota_fija:"Cuota fija",suave_fuerte:"Suave → fuerte",fuerte_suave:"Fuerte → suave",anticipo_cuota:"Anticipo + cuota",personalizado:"Personalizado"};
+  var PLAN_LABELS={cuotas_iguales:"Cuotas iguales",anticipo_iguales:"Anticipo + cuotas iguales",pago_unico:"Pago único",fuerte_suave:"Fuerte al inicio, suave al final",suave_fuerte:"Suave al inicio, fuerte al final",personalizado:"Personalizado",cuota_fija:"Cuotas iguales",anticipo_cuota:"Anticipo + cuotas iguales"};
 
   function uid(){return Math.random().toString(36).slice(2,9);}
   function fmtQ(n){return "Q"+Math.round(n||0).toLocaleString("en-US");}
@@ -190,7 +192,7 @@
   function seed(){
     var people=[{id:"lp",name:"Luis Pablo"},{id:"dani",name:"Daniela"},{id:"paola",name:"Paola"},{id:"julia",name:"Julia"},{id:"luis",name:"Luis"},{id:"danilo",name:"Danilo"}];
     var pools=[{id:"boda",label:"Boda"},{id:"plp",label:"Personal LP"},{id:"pdani",label:"Personal Dani"},{id:"comp",label:"Compartida LP+Dani"},{id:"reserva",label:"Reserva"},{id:"eng",label:"Enganche casa (meta)"}];
-    function ins(list){return list.map(function(x){return {id:uid(),date:x[0],amount:x[1],paid:false,boleta:null,account:null};});}
+    function ins(list){return list.map(function(x){return {id:uid(),date:x[0],planned:x[1],paidAmount:0,paid:false,boleta:null,account:null};});}
     var contributors=[
       {id:uid(),name:"Paola",ceiling:100000,plan:"suave_fuerte",confidence:"firme",installments:ins([["2026-09-05",6000],["2026-10-05",6000],["2026-11-05",6000],["2026-12-05",6000],["2027-01-05",6000],["2027-02-05",6000],["2027-03-05",16000],["2027-04-05",16000],["2027-05-05",16000],["2027-06-05",16000]])},
       {id:uid(),name:"Julia",ceiling:65000,plan:"cuota_fija",confidence:"firme",installments:[]},
@@ -226,24 +228,26 @@
     // fijar comprometido de los contratados (precio en Q del vendor seleccionado)
     rubros.forEach(function(r){if(r.selectedVendorId){var v=r.vendors.filter(function(x){return x.id===r.selectedVendorId;})[0];if(v)r.comprometido=(v.currency==="USD")?Math.round(v.amount*7.95):v.amount;}});
     rubros[0].comprometido=129000; rubros[0].pagado=5000; rubros[1].pagado=16000;
-    var teas=[{id:uid(),name:"Té de novia · Zona 14",date:"2026-11-15",amount:8000}];
-    var gifts=[{id:uid(),from:"Regalos de la recepción",date:"2027-07-10",amount:5000}];
-    return {fx:7.95,people:people,pools:pools,rubros:rubros,contributors:contributors,teas:teas,gifts:gifts};
+    var aportes=[{id:uid(),name:"Despedida de solteros",date:"2027-05-15",amount:8000,poolId:"boda"},{id:uid(),name:"Regalos de la recepción",date:"2027-07-10",amount:5000,poolId:"boda"}];
+    return {fx:7.95,people:people,pools:pools,rubros:rubros,contributors:contributors,aportes:aportes};
   }
 
-  var state, view="inicio", selContrib=null, pending=null, storageFull=false, selVendor=null;
+  var state, view="inicio", selContrib=null, pending=null, storageFull=false, selVendor=null, chartPool="boda";
   function load(){try{var s=localStorage.getItem(KEY);if(s)return JSON.parse(s);}catch(e){}return null;}
   function save(){try{localStorage.setItem(KEY,JSON.stringify(state));storageFull=false;}catch(e){storageFull=true;}var b=document.getElementById("banner");if(b)b.style.display=storageFull?"block":"none";}
   state=load()||seed();
   if(!state.teas)state.teas=[];
   if(!state.gifts)state.gifts=[];
+  if(!state.aportes){state.aportes=[];(state.teas||[]).forEach(function(t){state.aportes.push({id:t.id||uid(),name:t.name||"Aporte",date:t.date||"",amount:+t.amount||0,poolId:"boda"});});(state.gifts||[]).forEach(function(g){state.aportes.push({id:g.id||uid(),name:g.from||"Regalo en efectivo",date:g.date||"",amount:+g.amount||0,poolId:"boda"});});}
+  if(!state.decisions)state.decisions=[];
+  state.pools.forEach(function(p){if(!p.goals)p.goals=[];});
   if(!state.fx)state.fx=7.95;
   state.rubros.forEach(function(r){
     if(!r.split)r.split={base:"porcentaje",funders:[]};
     if(!r.vendors){r.vendors=[];if(r.vendor){var vid=uid();r.vendors.push({id:vid,name:r.vendor,currency:"GTQ",amount:r.comprometido||0,fav:false,note:"",proposal:r.proposal||null});r.selectedVendorId=vid;}else r.selectedVendorId=null;}
     if(r.selectedVendorId===undefined)r.selectedVendorId=null;
   });
-  state.contributors.forEach(function(c){if(c.guests===undefined)c.guests=0;});
+  state.contributors.forEach(function(c){if(c.guests===undefined)c.guests=0;c.installments.forEach(function(i){if(i.planned===undefined)i.planned=i.amount||0;if(i.paidAmount===undefined)i.paidAmount=i.paid?(i.amount||0):0;if(i.paid===undefined)i.paid=i.paidAmount>0;if(i.account===undefined)i.account=null;});});
   (function(){var am=assignedMap();state.contributors.forEach(function(c){if(c.planBase===undefined)c.planBase=am[c.id]||0;});})();
   if(!selContrib && state.contributors[0]) selContrib=state.contributors[0].id;
 
@@ -256,7 +260,7 @@
   function poolLabel(id){var p=state.pools.filter(function(x){return x.id===id;})[0];return p?p.label:"—";}
   function rubroDisp(r){return Math.max(0,r.techo-r.comprometido);}
   function budgetTotals(){var techo=0,comp=0,pag=0;state.rubros.forEach(function(r){techo+=r.techo;comp+=r.comprometido;pag+=r.pagado;});return {techo:techo,comp:comp,pag:pag,disp:Math.max(0,techo-comp)};}
-  function fundingTotals(){var pledges=0,enPlan=0,pagado=0;state.contributors.forEach(function(c){pledges+=(c.ceiling||0);c.installments.forEach(function(i){enPlan+=i.amount||0;if(i.paid)pagado+=i.amount||0;});});var teas=(state.teas||[]).reduce(function(a,x){return a+(+x.amount||0);},0);var gifts=(state.gifts||[]).reduce(function(a,x){return a+(+x.amount||0);},0);var prometido=pledges+teas+gifts;return {pledges:pledges,teas:teas,gifts:gifts,prometido:prometido,enPlan:enPlan,pagado:pagado,brecha:Math.max(0,WEDDING.meta-prometido)};}
+  function fundingTotals(){var pledges=0,enPlan=0,pagado=0;state.contributors.forEach(function(c){pledges+=(c.ceiling||0);c.installments.forEach(function(i){enPlan+=(i.planned!=null?i.planned:i.amount)||0;if(i.paid)pagado+=(i.paidAmount!=null?i.paidAmount:i.amount)||0;});});var ap=state.aportes||[];var aportesBoda=ap.filter(function(a){return a.poolId==="boda";}).reduce(function(s,a){return s+(+a.amount||0);},0);var aportesOtros=ap.filter(function(a){return a.poolId!=="boda";}).reduce(function(s,a){return s+(+a.amount||0);},0);var prometido=pledges+aportesBoda;return {pledges:pledges,aportesBoda:aportesBoda,aportesOtros:aportesOtros,prometido:prometido,enPlan:enPlan,pagado:pagado,brecha:Math.max(0,WEDDING.meta-prometido)};}
   // ----- reparto (mecánica tipo Splitwise) -----
   function contribById(id){return state.contributors.filter(function(x){return x.id===id;})[0];}
   function pctSum(r){return r.split.funders.reduce(function(a,f){return a+(+f.pct||0);},0);}
@@ -278,10 +282,27 @@
   // desglose: por cada rubro donde el aportante financia, cuánto le toca y con qué proveedor
   function sharesByContributor(cid){var out=[];state.rubros.forEach(function(r){if(!(r.split&&r.split.funders))return;if(!r.split.funders.some(function(f){return f.cid===cid;}))return;var sh=computeShares(r).filter(function(s){return s.cid===cid;})[0];if(sh)out.push({rubroId:r.id,name:r.name,vendor:r.vendor,contratado:r.status==="contratado",amount:sh.amount,icon:rubroIcon(r)});});return out;}
   // pagado por cuenta (rubro) para un aportante: suma de cuotas pagadas dirigidas a ese rubro
-  function paidByRubro(c){var m={};c.installments.forEach(function(i){if(i.paid&&i.account)m[i.account]=(m[i.account]||0)+(i.amount||0);});return m;}
+  function paidByRubro(c){var m={};c.installments.forEach(function(i){if((+i.paidAmount>0)&&i.account)m[i.account]=(m[i.account]||0)+(+i.paidAmount||0);});return m;}
+  function installmentPool(i){return i.account?(rubro(i.account)?rubro(i.account).poolId:"boda"):"boda";}
+  function cumPaidUpTo(poolId,dateISO){var mk=monthKey(dateISO),tot=0;state.contributors.forEach(function(c){c.installments.forEach(function(i){if(!i.date||!(+i.paidAmount>0))return;if(installmentPool(i)!==poolId)return;if(monthKey(i.date)<=mk)tot+=(+i.paidAmount||0);});});(state.aportes||[]).forEach(function(a){if(a.poolId!==poolId||!a.date)return;if(monthKey(a.date)<=mk)tot+=(+a.amount||0);});return tot;}
   function statusBadge(s){return s==="contratado"?'<span class="badge b-success">Contratado</span>':s==="evaluacion"?'<span class="badge b-warn">En evaluación</span>':'<span class="badge b-neutral">Por definir</span>';}
   function avatars(ids){return (ids||[]).map(function(id){return '<span class="av" title="'+esc(personName(id))+'">'+initials(personName(id))+'</span>';}).join("");}
-  function generate(total,n,start,shape){if(!total||!n||n<1||!start)return [];var w=[];for(var i=0;i<n;i++){w.push(shape==="cuota_fija"?1:shape==="suave_fuerte"?i+1:shape==="fuerte_suave"?n-i:shape==="anticipo_cuota"?(i===0?Math.max(1,(n-1)*1.6):1):1);}var sw=w.reduce(function(a,b){return a+b;},0),out=[],acc=0;for(var j=0;j<n;j++){var amt=Math.round((total*w[j]/sw)/50)*50;out.push({id:uid(),date:addMonths(start,j),amount:amt,paid:false,boleta:null,account:null});acc+=amt;}if(out.length)out[out.length-1].amount+=(total-acc);return out;}
+  function generate(total,n,start,shape){
+    if(!total||!start)return [];
+    if(shape==="pago_unico")n=1;
+    if(!n||n<1)return [];
+    var w=[];for(var i=0;i<n;i++){var half=n/2;var wt=1;
+      if(shape==="cuotas_iguales"||shape==="cuota_fija")wt=1;
+      else if(shape==="suave_fuerte")wt=(i<half)?1:2;
+      else if(shape==="fuerte_suave")wt=(i<half)?2:1;
+      else if(shape==="anticipo_iguales"||shape==="anticipo_cuota")wt=(i===0?Math.max(1,(n-1)*1.6):1);
+      else wt=1;
+      w.push(wt);}
+    var sw=w.reduce(function(a,b){return a+b;},0),out=[],acc=0;
+    for(var j=0;j<n;j++){var amt=Math.round((total*w[j]/sw)/50)*50;out.push({id:uid(),date:addMonths(start,j),planned:amt,paidAmount:0,paid:false,boleta:null,account:null});acc+=amt;}
+    if(out.length)out[out.length-1].planned+=(total-acc);
+    return out;
+  }
 
   // ---------- vistas ----------
   function renderTop(){document.getElementById("wtitle").textContent=WEDDING.name;var days=Math.round((new Date(WEDDING.date+"T00:00:00")-new Date())/86400000);document.getElementById("wcount").textContent="Faltan "+days+" días · 3 jul 2027";Array.prototype.forEach.call(document.querySelectorAll(".tab"),function(t){t.classList.toggle("active",t.dataset.view===view);});}
@@ -356,22 +377,24 @@
 
   function vAportes(){
     var ft=fundingTotals();
-    var kpis=[["Prometido",fmtQ(ft.prometido),"aport. "+fmtQ(ft.pledges)+" · tés "+fmtQ(ft.teas)+" · reg. "+fmtQ(ft.gifts)],["Meta",fmtQ(WEDDING.meta),""],["Brecha",fmtQ(ft.brecha),"falta conseguir"],["En plan",fmtQ(ft.enPlan),fmtQ(ft.pagado)+" pagado"]].map(function(x){return '<div class="soft"><div class="kpi-label">'+x[0]+'</div><div class="kpi-val num">'+x[1]+'</div>'+(x[2]?'<div style="font-size:11px;color:var(--ink2)">'+x[2]+'</div>':'')+'</div>';}).join("");
-    var list=state.contributors.map(function(c){var planned=c.installments.reduce(function(s,i){return s+(i.amount||0);},0);return '<div class="contrib'+(c.id===selContrib?" sel":"")+'" data-act="sel-contrib" data-id="'+c.id+'"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span style="font-weight:600;flex:1">'+esc(c.name)+'</span>'+(c.confidence==="incierto"?'<span class="badge b-warn">por confirmar</span>':'<span class="badge b-neutral">'+PLAN_LABELS[c.plan]+'</span>')+'<button class="row-del" data-act="del-contrib-card" data-id="'+c.id+'" title="Eliminar aportante">×</button></div><div class="sub"><span>Techo: '+(c.ceiling?fmtQ(c.ceiling):"—")+'</span><span>En plan: '+fmtQ(planned)+'</span></div></div>';}).join("");
-    return '<div class="grid g4" style="margin-bottom:16px">'+kpis+'</div><div class="grid" style="grid-template-columns:320px 1fr;align-items:start"><div><div class="sec-title"><h2>Aportantes</h2><button class="btn btn-sm" data-act="add-contrib">+ Agregar</button></div>'+list+'</div><div class="card" id="planEditor">'+planEditorHTML()+'</div></div>'+otrosHTML()+'<div class="grid g2" style="margin-top:16px"><div class="card"><div class="sec-title"><h2>Calendario de aportes</h2></div><div id="calBox">'+calendarHTML()+'</div></div><div class="card"><div class="sec-title"><h2>Flujo mensual</h2></div><div class="flow" id="flowBox">'+flowHTML()+'</div></div></div>';
+    var kpis=[["Prometido",fmtQ(ft.prometido),"aportantes "+fmtQ(ft.pledges)+" · aportes "+fmtQ(ft.aportesBoda)],["Meta",fmtQ(WEDDING.meta),""],["Brecha",fmtQ(ft.brecha),"falta conseguir"],["En plan",fmtQ(ft.enPlan),fmtQ(ft.pagado)+" pagado"]].map(function(x){return '<div class="soft"><div class="kpi-label">'+x[0]+'</div><div class="kpi-val num">'+x[1]+'</div>'+(x[2]?'<div style="font-size:11px;color:var(--ink2)">'+x[2]+'</div>':'')+'</div>';}).join("");
+    var list=state.contributors.map(function(c){var planned=c.installments.reduce(function(s,i){return s+(+i.planned||0);},0);return '<div class="contrib'+(c.id===selContrib?" sel":"")+'" data-act="sel-contrib" data-id="'+c.id+'"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span style="font-weight:600;flex:1">'+esc(c.name)+'</span>'+(c.confidence==="incierto"?'<span class="badge b-warn">por confirmar</span>':'<span class="badge b-neutral">'+PLAN_LABELS[c.plan]+'</span>')+'<button class="row-del" data-act="del-contrib-card" data-id="'+c.id+'" title="Eliminar aportante">×</button></div><div class="sub"><span>Techo: '+(c.ceiling?fmtQ(c.ceiling):"—")+'</span><span>En plan: '+fmtQ(planned)+'</span></div></div>';}).join("");
+    return '<div class="grid g4" style="margin-bottom:16px">'+kpis+'</div><div class="grid" style="grid-template-columns:320px 1fr;align-items:start"><div><div class="sec-title"><h2>Aportantes</h2><button class="btn btn-sm" data-act="add-contrib">+ Agregar</button></div>'+list+'</div><div class="card" id="planEditor">'+planEditorHTML()+'</div></div>'+aportesHTML()+'<div class="card" style="margin-top:16px"><div class="sec-title"><h2>Plan vs. real por bolsa</h2><span class="muted" style="font-size:12px">Acumulado hasta la fecha del evento</span></div><div id="flowBox">'+chartHTML()+'</div></div><div class="card" style="margin-top:16px"><div class="sec-title"><h2>Calendario de aportes</h2></div><div id="calBox">'+calendarHTML()+'</div></div>';
   }
-  function otrosHTML(){
-    var teas=state.teas||[], gifts=state.gifts||[];
-    var teaRows=teas.map(function(x){return '<div style="display:flex;gap:6px;align-items:center;padding:5px 0;border-top:1px solid var(--line);flex-wrap:wrap"><input data-act="tea-name" data-id="'+x.id+'" value="'+esc(x.name||"")+'" placeholder="Nombre del té" style="flex:1;min-width:90px"><input type="date" data-act="tea-date" data-id="'+x.id+'" value="'+(x.date||"")+'" style="width:140px"><input type="number" data-act="tea-amt" data-id="'+x.id+'" value="'+(x.amount||0)+'" style="width:100px;text-align:right"><button class="row-del" data-act="del-tea" data-id="'+x.id+'">×</button></div>';}).join("");
-    var teaSum=teas.reduce(function(a,x){return a+(+x.amount||0);},0);
-    var giftRows=gifts.map(function(x){return '<div style="display:flex;gap:6px;align-items:center;padding:5px 0;border-top:1px solid var(--line);flex-wrap:wrap"><input data-act="gift-from" data-id="'+x.id+'" value="'+esc(x.from||"")+'" placeholder="De quién" style="flex:1;min-width:90px"><input type="date" data-act="gift-date" data-id="'+x.id+'" value="'+(x.date||"")+'" style="width:140px"><input type="number" data-act="gift-amt" data-id="'+x.id+'" value="'+(x.amount||0)+'" style="width:100px;text-align:right"><button class="row-del" data-act="del-gift" data-id="'+x.id+'">×</button></div>';}).join("");
-    var giftSum=gifts.reduce(function(a,x){return a+(+x.amount||0);},0);
-    return '<div class="grid g2" style="margin-top:16px"><div class="card"><div class="sec-title"><h2>Tés de novia</h2><button class="btn btn-sm" data-act="add-tea">+ Agregar té</button></div><p class="muted" style="font-size:12px;margin-bottom:6px">Eventos para levantar fondos · ingreso colectivo.</p>'+(teaRows||'<span class="muted" style="font-size:12px">Sin tés aún.</span>')+'<div style="text-align:right;margin-top:8px;font-weight:600" class="num">Total tés: '+fmtQ(teaSum)+'</div></div><div class="card"><div class="sec-title"><h2>Regalos en efectivo</h2><button class="btn btn-sm" data-act="add-gift">+ Agregar regalo</button></div><p class="muted" style="font-size:12px;margin-bottom:6px">Aportes post-boda · ayudan a cerrar la brecha o van a una meta.</p>'+(giftRows||'<span class="muted" style="font-size:12px">Sin regalos aún.</span>')+'<div style="text-align:right;margin-top:8px;font-weight:600" class="num">Total regalos: '+fmtQ(giftSum)+'</div></div></div>';
+  function aportesHTML(){
+    var aportes=state.aportes||[];
+    var rows=aportes.map(function(x){
+      var poolOpts=state.pools.map(function(p){return '<option value="'+p.id+'"'+(p.id===x.poolId?" selected":"")+'>'+esc(p.label)+'</option>';}).join("");
+      return '<div style="display:flex;gap:6px;align-items:center;padding:7px 0;border-top:1px solid var(--line);flex-wrap:wrap"><input data-act="aporte-name" data-id="'+x.id+'" value="'+esc(x.name||"")+'" placeholder="Ej. Despedida de solteros" style="flex:1;min-width:130px"><input type="date" data-act="aporte-date" data-id="'+x.id+'" value="'+(x.date||"")+'" style="width:140px"><select data-act="aporte-pool" data-id="'+x.id+'" title="Bolsa destino" style="max-width:160px">'+poolOpts+'</select><input type="number" data-act="aporte-amt" data-id="'+x.id+'" value="'+(x.amount||0)+'" style="width:100px;text-align:right"><button class="row-del" data-act="del-aporte" data-id="'+x.id+'">×</button></div>';
+    }).join("");
+    var sum=aportes.reduce(function(a,x){return a+(+x.amount||0);},0);
+    return '<div class="card" style="margin-top:16px"><div class="sec-title"><h2>Despedidas y Aportes</h2><button class="btn btn-sm" data-act="add-aporte">+ Agregar aporte</button></div><p class="muted" style="font-size:12px;margin-bottom:6px">Despedidas, regalos en efectivo y otros ingresos. Cada uno suma a la <strong>bolsa destino</strong> que elijas (Boda, Luna de miel, Enganche casa…).</p>'+(rows||'<span class="muted" style="font-size:12px">Sin aportes aún. Agrega una despedida, un regalo, etc.</span>')+'<div style="text-align:right;margin-top:8px;font-weight:600" class="num">Total aportes: '+fmtQ(sum)+'</div></div>';
   }
   function planEditorHTML(){
     var c=state.contributors.filter(function(x){return x.id===selContrib;})[0];
     if(!c)return "<p>Selecciona un aportante.</p>";
-    var planned=c.installments.reduce(function(s,i){return s+(i.amount||0);},0);
+    var planned=c.installments.reduce(function(s,i){return s+(+i.planned||0);},0);
+    var paidTotal=c.installments.reduce(function(s,i){return s+(+i.paidAmount||0);},0);
     var asg=(assignedMap()[c.id]||0), techo=c.ceiling||0, pend=techo-asg;
     // ---- desglose de lo que le toca por proveedor/rubro, con pagado/pendiente ----
     var det=sharesByContributor(c.id);
@@ -386,7 +409,6 @@
       (detRows||'<span class="muted" style="font-size:12px">Aún no está asignado a ningún rubro. Agrégalo en el reparto de un rubro.</span>')+
       '<div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--line);margin-top:6px;padding-top:8px;font-size:13px"><span style="font-weight:600">Total asignado</span><span class="num" style="font-weight:700">'+fmtQ(asg)+'</span></div>'+
       '<div style="font-size:12px;margin-top:6px">'+pendTxt+'</div></div>';
-    // ---- aviso: lo asignado cambió desde que se generó el plan ----
     var alertBox="";
     if(c.installments.length>0 && c.planBase!==undefined && c.planBase!==asg){
       alertBox='<div class="hint hint-warn" style="display:block;margin-bottom:12px">🔔 Lo asignado a '+esc(c.name)+' cambió de <strong class="num">'+fmtQ(c.planBase)+'</strong> a <strong class="num">'+fmtQ(asg)+'</strong> (elegiste un proveedor o cambió un reparto). '+
@@ -394,26 +416,63 @@
     }
     var rows=c.installments.slice().sort(function(a,b){return (a.date||"")<(b.date||"")?-1:1;}).map(function(i){
       var bol=i.boleta?'<img class="thumb" src="'+i.boleta.thumb+'" data-act="view-boleta" data-iid="'+i.id+'" title="Ver boleta">':'<button class="btn btn-sm" data-act="boleta" data-iid="'+i.id+'">📎 Boleta</button>';
-      var needsAcct=i.paid&&!i.account;
+      var needsAcct=(+i.paidAmount>0)&&!i.account;
       var acctOpts='<option value="">— cuenta —</option>'+det.map(function(d){return '<option value="'+d.rubroId+'"'+(i.account===d.rubroId?" selected":"")+'>'+esc(d.name)+(d.vendor?" · "+esc(d.vendor):"")+'</option>';}).join("");
       return '<tr data-iid="'+i.id+'"><td><input type="date" data-act="ins-date" value="'+(i.date||"")+'"></td>'+
-        '<td><select data-act="ins-account" style="max-width:170px'+(needsAcct?';border-color:var(--over)':'')+'" title="'+(needsAcct?"Elige la cuenta de este pago":"Cuenta del pago")+'">'+acctOpts+'</select></td>'+
-        '<td><input type="number" step="50" data-act="ins-amt" value="'+(i.amount||0)+'"></td>'+
-        '<td style="text-align:center"><input type="checkbox" data-act="ins-paid" '+(i.paid?"checked":"")+'></td>'+
+        '<td><select data-act="ins-account" style="max-width:150px'+(needsAcct?';border-color:var(--over)':'')+'" title="'+(needsAcct?"Elige la cuenta de este pago":"Cuenta del pago")+'">'+acctOpts+'</select></td>'+
+        '<td><input type="number" step="50" class="plan-amt" data-act="ins-planned" value="'+(+i.planned||0)+'" title="Monto planificado (autogenerado por el plan de pago; editable)"></td>'+
+        '<td><input type="number" step="50" data-act="ins-paidamt" value="'+(+i.paidAmount||0)+'" placeholder="0" title="Monto realmente pagado"></td>'+
         '<td style="text-align:center">'+bol+'</td><td style="text-align:right"><button class="row-del" data-act="ins-del" data-iid="'+i.id+'">×</button></td></tr>';
     }).join("");
     var diff=asg-planned;
     var hint=asg>0&&diff>0?'<span class="hint hint-warn">Faltan '+fmtQ(diff)+' del asignado por planificar.</span>':asg>0&&diff<0?'<span class="hint hint-ok">El plan cubre más que lo asignado ('+fmtQ(-diff)+' extra).</span>':asg>0?'<span class="hint hint-ok">El plan cubre exacto lo asignado.</span>':"";
     var genTotal=asg>0?asg:techo;
+    var shapeOpts=[["cuotas_iguales","Cuotas iguales"],["anticipo_iguales","Anticipo + cuotas iguales"],["pago_unico","Pago único"],["fuerte_suave","Fuerte al inicio, suave al final"],["suave_fuerte","Suave al inicio, fuerte al final"]].map(function(o){return '<option value="'+o[0]+'"'+(c.plan===o[0]?" selected":"")+'>'+o[1]+'</option>';}).join("");
     return '<div class="sec-title"><h2>Plan de pagos · '+esc(c.name)+'</h2><button class="btn-ghost" data-act="del-contrib">Eliminar</button></div>'+
       '<div class="ctrl-row"><div class="fld"><label>Nombre</label><input data-act="c-name" value="'+esc(c.name)+'" style="width:170px"></div><div class="fld"><label>Techo prometido (Q)</label><input type="number" step="500" data-act="c-ceil" value="'+techo+'" style="width:120px"></div></div>'+
       desglose+alertBox+
-      '<div class="genrow"><div class="fld"><label>Total (Q) · sug. lo asignado</label><input type="number" id="gTotal" value="'+genTotal+'"></div><div class="fld"><label># cuotas</label><input type="number" id="gN" min="1" value="6"></div><div class="fld"><label>Primera</label><input type="date" id="gStart" value="'+((c.installments[0]&&c.installments[0].date)||"2026-09-05")+'" style="width:150px"></div><div class="fld"><label>Forma</label><select id="gShape"><option value="cuota_fija">Cuota fija</option><option value="suave_fuerte">Suave → fuerte</option><option value="fuerte_suave">Fuerte → suave</option><option value="anticipo_cuota">Anticipo + cuota</option></select></div><button class="btn btn-primary btn-sm" data-act="gen-plan">Generar</button></div>'+
-      '<table><thead><tr><th>Fecha</th><th>Cuenta</th><th style="text-align:right">Monto</th><th style="text-align:center">Pagado</th><th style="text-align:center">Boleta</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="6" class="muted" style="padding:12px 8px">Sin cuotas. Genera un plan o agrega una.</td></tr>')+'</tbody></table>'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px"><button class="btn btn-sm" data-act="add-ins">+ Agregar cuota</button><span style="font-weight:600" class="num">Total: '+fmtQ(planned)+'</span></div>'+hint;
+      '<div class="genrow"><div class="fld"><label>Total (Q) · sug. lo asignado</label><input type="number" id="gTotal" value="'+genTotal+'"></div><div class="fld"><label># cuotas</label><input type="number" id="gN" min="1" value="6"></div><div class="fld"><label>Primera</label><input type="date" id="gStart" value="'+((c.installments[0]&&c.installments[0].date)||"2026-09-05")+'" style="width:150px"></div><div class="fld"><label>Plan de Pago</label><select id="gShape">'+shapeOpts+'</select></div><button class="btn btn-primary btn-sm" data-act="gen-plan">Generar</button></div>'+
+      '<p class="muted" style="font-size:11px;margin:2px 0 8px"><span style="color:var(--ink3)">■</span> El <strong>Plan</strong> (gris) lo autogenera el plan de pago elegido. El <strong>Pagado</strong> lo capturas tú con cada depósito.</p>'+
+      '<table><thead><tr><th>Fecha</th><th>Cuenta</th><th style="text-align:right;color:var(--ink3)">Plan</th><th style="text-align:right">Pagado</th><th style="text-align:center">Boleta</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="6" class="muted" style="padding:12px 8px">Sin cuotas. Genera un plan o agrega una.</td></tr>')+'</tbody></table>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;flex-wrap:wrap;gap:8px"><button class="btn btn-sm" data-act="add-ins">+ Agregar cuota</button><span style="font-weight:600" class="num">Plan: '+fmtQ(planned)+' · Pagado: '+fmtQ(paidTotal)+'</span></div>'+hint;
   }
-  function calendarHTML(){var items=[];state.contributors.forEach(function(c){c.installments.forEach(function(i){if(i.date)items.push({name:c.name,amount:i.amount,date:i.date,paid:i.paid,boleta:!!i.boleta});});});items.sort(function(a,b){return a.date<b.date?-1:1;});if(!items.length)return '<p class="muted">Sin cuotas todavía.</p>';var html="",cur=null;items.forEach(function(it){var mk=monthKey(it.date);if(mk!==cur){if(cur!==null)html+="</div>";html+='<div class="cal-month"><h4>'+monthName(mk)+'</h4>';cur=mk;}html+='<div class="cal-item"><span>'+shortDate(it.date)+' · '+esc(it.name)+'</span>'+(it.boleta?'<span title="con boleta">📎</span>':'')+(it.paid?'<span class="badge b-teal">pagado</span>':'')+'<span class="amt num">'+fmtQ(it.amount)+'</span></div>';});return html+"</div>";}
-  function flowHTML(){var by={};state.contributors.forEach(function(c){c.installments.forEach(function(i){if(i.date){var k=monthKey(i.date);by[k]=(by[k]||0)+(i.amount||0);}});});var keys=Object.keys(by).sort();if(!keys.length)return '<p class="muted">Sin datos.</p>';var max=Math.max.apply(null,keys.map(function(k){return by[k];}));return keys.map(function(k){return '<div class="col"><div class="vlab num">'+fmtQ(by[k])+'</div><div class="barv" style="height:'+Math.round(by[k]/max*110)+'px"></div><div class="mlab">'+monthName(k)+'</div></div>';}).join("");}
+  function calendarHTML(){var items=[];state.contributors.forEach(function(c){c.installments.forEach(function(i){if(i.date)items.push({name:c.name,amount:(+i.planned||0),date:i.date,paid:(+i.paidAmount>0),boleta:!!i.boleta});});});items.sort(function(a,b){return a.date<b.date?-1:1;});if(!items.length)return '<p class="muted">Sin cuotas todavía.</p>';var html="",cur=null;items.forEach(function(it){var mk=monthKey(it.date);if(mk!==cur){if(cur!==null)html+="</div>";html+='<div class="cal-month"><h4>'+monthName(mk)+'</h4>';cur=mk;}html+='<div class="cal-item"><span>'+shortDate(it.date)+' · '+esc(it.name)+'</span>'+(it.boleta?'<span title="con boleta">📎</span>':'')+(it.paid?'<span class="badge b-teal">pagado</span>':'')+'<span class="amt num">'+fmtQ(it.amount)+'</span></div>';});return html+"</div>";}
+  function chartHTML(){
+    var poolId=chartPool||"boda";
+    var selOpts=state.pools.map(function(p){return '<option value="'+p.id+'"'+(p.id===poolId?" selected":"")+'>'+esc(p.label)+'</option>';}).join("");
+    var selector='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><span style="font-size:13px;color:var(--ink2)">Bolsa</span><select data-act="chart-pool" style="font-weight:600">'+selOpts+'</select></div>';
+    var planM={}, realM={};
+    state.contributors.forEach(function(c){c.installments.forEach(function(i){if(!i.date)return;var pid=i.account?(rubro(i.account)?rubro(i.account).poolId:"boda"):"boda";if(pid!==poolId)return;var k=monthKey(i.date);planM[k]=(planM[k]||0)+(+i.planned||0);realM[k]=(realM[k]||0)+(+i.paidAmount||0);});});
+    (state.aportes||[]).forEach(function(a){if(a.poolId!==poolId||!a.date)return;var k=monthKey(a.date);planM[k]=(planM[k]||0)+(+a.amount||0);realM[k]=(realM[k]||0)+(+a.amount||0);});
+    var set={};Object.keys(planM).forEach(function(k){set[k]=1;});Object.keys(realM).forEach(function(k){set[k]=1;});
+    if(poolId==="boda")set[monthKey(WEDDING.date)]=1;
+    var months=Object.keys(set).sort();
+    if(!months.length)return selector+'<p class="muted">Sin cuotas ni aportes en esta bolsa todavía.</p>';
+    var cumPlan=[],cumReal=[],ap=0,ar=0;months.forEach(function(k){ap+=(planM[k]||0);ar+=(realM[k]||0);cumPlan.push(ap);cumReal.push(ar);});
+    var meta=poolId==="boda"?WEDDING.meta:0;
+    var ymax=Math.max(ap,ar,meta,1);ymax=Math.ceil(ymax/5000)*5000;
+    var W=640,H=280,padL=58,padR=18,padT=18,padB=40,plotW=W-padL-padR,plotH=H-padT-padB;
+    function X(idx){return padL+(months.length<=1?plotW/2:(idx/(months.length-1))*plotW);}
+    function Y(v){return padT+plotH-(v/ymax)*plotH;}
+    var grid="",yl;for(var g=0;g<=4;g++){var gv=ymax*g/4,gy=Y(gv);grid+='<line x1="'+padL+'" y1="'+gy+'" x2="'+(W-padR)+'" y2="'+gy+'" stroke="var(--line)" stroke-width="1"/>';grid+='<text x="'+(padL-6)+'" y="'+(gy+4)+'" text-anchor="end" font-size="10" fill="var(--ink3)">'+fmtQ(gv)+'</text>';}
+    var metaLine="";if(meta>0&&meta<=ymax){var my=Y(meta);metaLine='<line x1="'+padL+'" y1="'+my+'" x2="'+(W-padR)+'" y2="'+my+'" stroke="var(--teal)" stroke-width="1.2" stroke-dasharray="2 3" opacity="0.7"/><text x="'+(W-padR)+'" y="'+(my-4)+'" text-anchor="end" font-size="10" fill="var(--teal)">Meta '+fmtQ(meta)+'</text>';}
+    var step=Math.ceil(months.length/6);var xlabels="";months.forEach(function(k,idx){if(idx%step===0||idx===months.length-1){xlabels+='<text x="'+X(idx)+'" y="'+(H-padB+16)+'" text-anchor="middle" font-size="10" fill="var(--ink3)">'+monthName(k)+'</text>';}});
+    function poly(arr){return arr.map(function(v,idx){return X(idx).toFixed(1)+","+Y(v).toFixed(1);}).join(" ");}
+    var planLine='<polyline points="'+poly(cumPlan)+'" fill="none" stroke="var(--ink3)" stroke-width="2.5"/>';
+    var realLine='<polyline points="'+poly(cumReal)+'" fill="none" stroke="var(--teal)" stroke-width="2.5" stroke-dasharray="6 4"/>';
+    var dots="";cumReal.forEach(function(v,idx){dots+='<circle cx="'+X(idx).toFixed(1)+'" cy="'+Y(v).toFixed(1)+'" r="3" fill="var(--teal)"/>';});
+    // marcas de metas del usuario para esta bolsa
+    var pool=state.pools.filter(function(p){return p.id===poolId;})[0];
+    var goals=(pool&&pool.goals)||[];
+    var goalMarks="";
+    goals.forEach(function(g){if(!g.date)return;var gk=monthKey(g.date);var idx=months.indexOf(gk);var gx=idx>=0?X(idx):X(months.length-1);var gy=Y(Math.min(g.amount,ymax));var cum=cumPaidUpTo(poolId,g.date);var done=cum>=g.amount;goalMarks+='<g><path d="M'+gx+','+(gy-7)+' l2,4 l4.5,.5 l-3.3,3.2 l.8,4.6 l-4-2.2 l-4,2.2 l.8,-4.6 l-3.3,-3.2 l4.5,-.5 z" fill="'+(done?"var(--paid)":"var(--warn-ink)")+'" stroke="#fff" stroke-width="0.5"/><text x="'+gx+'" y="'+(gy-12)+'" text-anchor="middle" font-size="9" fill="'+(done?"var(--success-ink)":"var(--warn-ink)")+'">'+fmtQ(g.amount)+'</text></g>';});
+    var svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;max-height:300px">'+grid+metaLine+planLine+realLine+dots+goalMarks+xlabels+'</svg>';
+    var legend='<div style="display:flex;gap:18px;flex-wrap:wrap;font-size:12px;margin-top:6px"><span style="display:flex;align-items:center;gap:6px"><span style="width:18px;height:3px;background:var(--ink3);display:inline-block"></span>Plan (lo que debería acumularse)</span><span style="display:flex;align-items:center;gap:6px"><span style="width:18px;height:0;border-top:3px dashed var(--teal);display:inline-block"></span>Real (según pagos)</span></div>';
+    var gap=ap-ar;var status=gap>0?'<span style="color:var(--warn-ink)">Vas '+fmtQ(gap)+' por debajo del plan acumulado.</span>':'<span style="color:var(--success-ink)">Vas al día o adelantado contra el plan.</span>';
+    var goalRows=goals.map(function(g){var cum=cumPaidUpTo(poolId,g.date||months[months.length-1]);var done=g.amount>0&&cum>=g.amount;return '<div style="display:flex;gap:6px;align-items:center;padding:6px 0;border-top:1px solid var(--line);flex-wrap:wrap"><span title="'+(done?"cumplida":"pendiente")+'">'+(done?"⭐":"☆")+'</span><span style="font-size:12px;color:var(--ink2)">Para</span><input type="date" data-act="goal-date" data-id="'+g.id+'" value="'+(g.date||"")+'" style="width:150px"><span style="font-size:12px;color:var(--ink2)">llevar</span><input type="number" step="1000" data-act="goal-amt" data-id="'+g.id+'" value="'+(g.amount||0)+'" style="width:110px;text-align:right" placeholder="Q pagado"><span style="font-size:12px;color:'+(done?"var(--success-ink)":"var(--ink3)")+'">'+(done?"✓ cumplida":"llevas "+fmtQ(cum))+'</span><button class="row-del" data-act="goal-del" data-id="'+g.id+'">×</button></div>';}).join("");
+    var goalsPanel='<details style="margin-top:12px" '+(goals.length?"open":"")+'><summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--teal-ink)">🎯 Metas de esta bolsa (opcional)</summary><div style="background:var(--raise);border:1px solid var(--line);border-radius:11px;padding:12px;margin-top:8px"><p class="muted" style="font-size:12px;margin-bottom:4px">Ponte metas de cuánto quieres llevar <strong>pagado</strong> en cierta fecha. Aparecen como ⭐ sobre la curva real.</p>'+(goalRows||'<span class="muted" style="font-size:12px">Sin metas aún.</span>')+'<div style="margin-top:8px"><button class="btn btn-sm" data-act="add-goal">+ Agregar meta</button></div></div></details>';
+    return selector+svg+legend+'<p style="font-size:12px;margin-top:8px">'+status+'</p>'+goalsPanel;
+  }
 
   function vProveedores(){
     // control de tipo de cambio (para proveedores en USD; todo se ve en quetzales)
@@ -487,8 +546,25 @@
 
     var bars=state.rubros.map(function(r){var over=r.comprometido>r.techo, ev=r.status==="evaluacion";var seg=ev?'<span style="width:78%;background:var(--estimate)"></span>':'<span style="width:'+(r.pagado/Math.max(r.techo,1)*100)+'%;background:var(--paid)"></span><span style="width:'+(Math.max(0,r.comprometido-r.pagado)/Math.max(r.techo,1)*100)+'%;background:'+(over?"var(--over)":"var(--committed)")+'"></span>';return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><span style="width:130px;font-size:13px">'+esc(r.name)+'</span><div class="bar" style="flex:1">'+seg+'</div><span style="width:66px;text-align:right;font-size:12px;color:'+(over?"var(--over)":"var(--ink2)")+'" class="num">'+(ev?"en eval.":fmtQ(r.techo))+'</span></div>';}).join("");
     var decisions=[];state.rubros.forEach(function(r){if(r.status==="evaluacion")decisions.push(["📷","Elegir proveedor de "+r.name,"Decisión","b-teal"]);if(r.comprometido>r.techo)decisions.push(["▲",r.name+" excede el techo","Sobrecosto","b-danger"]);});if(ft.brecha>0)decisions.push(["🚩","Cerrar brecha de fondeo de "+fmtQ(ft.brecha),"Fondeo","b-warn"]);
-    var decHTML=decisions.map(function(d){return '<div class="cal-item"><span style="width:20px">'+d[0]+'</span><span style="flex:1">'+esc(d[1])+'</span><span class="badge '+d[3]+'">'+d[2]+'</span></div>';}).join("")||'<p class="muted">Sin decisiones pendientes.</p>';
-    return eventBar+'<div class="grid g4" style="margin-bottom:16px">'+kpis+'</div>'+overlook+'<div class="card" style="margin-bottom:16px"><div class="sec-title"><h2>Presupuesto por rubro</h2><span class="muted" style="font-size:12px">Pagado · Comprometido · Disponible</span></div>'+bars+'<div class="legend"><span><span class="dot" style="background:var(--paid)"></span>Pagado</span><span><span class="dot" style="background:var(--committed)"></span>Comprometido</span><span><span class="dot" style="background:var(--estimate)"></span>En evaluación</span></div></div><div class="card"><div class="sec-title"><h2>Decisiones pendientes</h2></div>'+decHTML+'</div>';
+    var autoHTML=decisions.map(function(d){return '<div class="cal-item"><span style="width:20px">'+d[0]+'</span><span style="flex:1">'+esc(d[1])+'</span><span class="badge '+d[3]+'">'+d[2]+'</span></div>';}).join("");
+    var BADGE={Decisión:"b-teal",Fondeo:"b-warn",Pendiente:"b-neutral"};
+    var manHTML=(state.decisions||[]).map(function(d){
+      var tagOpts=["Decisión","Fondeo","Pendiente"].map(function(t){return '<option'+(d.tag===t?" selected":"")+'>'+t+'</option>';}).join("");
+      return '<div class="cal-item"><span style="width:20px">📌</span><input data-act="dec-text" data-id="'+d.id+'" value="'+esc(d.text)+'" style="flex:1;border:1px solid transparent;background:transparent;padding:4px 6px;border-radius:6px" onfocus="this.style.borderColor=\'var(--line)\'" onblur="this.style.borderColor=\'transparent\'"><select data-act="dec-tag" data-id="'+d.id+'" style="font-size:12px">'+tagOpts+'</select><button class="row-del" data-act="dec-del" data-id="'+d.id+'" title="Borrar">×</button></div>';
+    }).join("");
+    var decHTML=(autoHTML+manHTML)||'<p class="muted">Sin decisiones pendientes.</p>';
+    // resumen de metas por bolsa (definidas en Aportes)
+    var allGoals=[];state.pools.forEach(function(p){(p.goals||[]).forEach(function(g){allGoals.push({pool:p.label,poolId:p.id,date:g.date,amount:g.amount});});});
+    allGoals.sort(function(a,b){return (a.date||"")<(b.date||"")?-1:1;});
+    var goalsSummary="";
+    if(allGoals.length){
+      goalsSummary='<div class="card" style="margin-bottom:16px"><div class="sec-title"><h2>Metas de fondeo</h2><span class="muted" style="font-size:12px">Definidas por bolsa en Aportes</span></div>'+allGoals.map(function(g){
+        var cum=cumPaidUpTo(g.poolId,g.date);
+        var done=cum>=g.amount;var pct=Math.min(100,Math.round(cum/Math.max(g.amount,1)*100));
+        return '<div style="padding:8px 0;border-top:1px solid var(--line)"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span><strong>'+esc(g.pool)+'</strong> · '+monthName(monthKey(g.date))+'</span><span class="num">'+(done?'<span style="color:var(--success-ink)">✓ ':'')+fmtQ(cum)+' / '+fmtQ(g.amount)+(done?'</span>':'')+'</span></div><div class="bar"><span style="width:'+pct+'%;background:'+(done?"var(--paid)":"var(--committed)")+'"></span></div></div>';
+      }).join("")+'</div>';
+    }
+    return eventBar+'<div class="grid g4" style="margin-bottom:16px">'+kpis+'</div>'+overlook+goalsSummary+'<div class="card" style="margin-bottom:16px"><div class="sec-title"><h2>Presupuesto por rubro</h2><span class="muted" style="font-size:12px">Pagado · Comprometido · Disponible</span></div>'+bars+'<div class="legend"><span><span class="dot" style="background:var(--paid)"></span>Pagado</span><span><span class="dot" style="background:var(--committed)"></span>Comprometido</span><span><span class="dot" style="background:var(--estimate)"></span>En evaluación</span></div></div><div class="card"><div class="sec-title"><h2>Decisiones pendientes</h2><button class="btn btn-sm" data-act="add-decision">+ Agregar decisión</button></div>'+decHTML+'</div>';
   }
 
   function vCopiloto(){return '<div class="soft" style="margin-bottom:18px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="color:var(--teal);font-size:18px">✦</span><span style="font-weight:600;font-size:16px">Pregúntale a la Nuvia</span><span class="badge b-neutral">Solo lectura · demo</span></div><div class="muted" style="font-size:12px;margin-bottom:12px">Novia + IA · la inteligencia que conoce tu boda al derecho y al revés.</div><div class="chips"><span class="chip" data-act="cop" data-q="mas20">¿Qué pasa si agrego 20 invitados?</span><span class="chip" data-act="cop" data-q="papa">¿Y si mi papá solo aporta Q3,000 este mes?</span><span class="chip" data-act="cop" data-q="dvj">Daniel vs Juanfer en foto</span></div></div><div id="copAns">'+copAnswer("mas20")+'</div>';}
@@ -511,13 +587,13 @@
     return '<div class="card" style="background:var(--tint);border-color:#CDEBDF;margin-bottom:18px"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px"><span class="mark" style="background:var(--teal);color:#fff">N</span><h2 style="font-size:24px;color:var(--teal-ink)">NUVIA Home</h2><span class="badge b-warn">En construcción</span></div>'+
       '<p style="color:var(--teal-ink);max-width:680px;font-size:15px">La boda es el punto de entrada, no el final. NUVIA Home acompañará la siguiente decisión de la pareja: <strong>dónde y cómo empezar su vida en común</strong> — usando lo que ya construyeron durante la boda.</p>'+
       '<p class="muted" style="font-size:13px;margin-top:8px">Estamos trabajando en esto. Aquí un adelanto de hacia dónde va Nuvia.</p></div>'+
-      '<div class="soft" style="margin-bottom:16px;display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:space-between"><div><div class="kpi-label">Puente desde la boda</div><div style="font-weight:600">Los regalos y fondos de la boda se conectan con la meta del primer hogar.</div></div><div style="text-align:right"><div class="kpi-label">Meta "Enganche casa"</div><div class="kpi-val num" style="color:var(--teal)">'+fmtQ(ft.gifts)+'</div><div style="font-size:11px;color:var(--ink2)">semilla desde regalos</div></div></div>'+
+      '<div class="soft" style="margin-bottom:16px;display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:space-between"><div><div class="kpi-label">Puente desde la boda</div><div style="font-weight:600">Los regalos y fondos de la boda se conectan con la meta del primer hogar.</div></div><div style="text-align:right"><div class="kpi-label">Meta "Enganche casa"</div><div class="kpi-val num" style="color:var(--teal)">'+fmtQ(ft.aportesOtros||0)+'</div><div style="font-size:11px;color:var(--ink2)">semilla desde aportes</div></div></div>'+
       '<div class="grid g3">'+cards+'</div>'+
       '<div class="soft" style="margin-top:16px;font-size:13px"><strong>Disciplina de producto:</strong> no construimos todo esto de golpe. La boda es la cuña; el hogar se integra con aliados (inmobiliarias, mobiliario) sobre la información que la pareja <em>autoriza</em> compartir. Primero excelente en la boda, luego el hogar.</div>';
   }
   var VIEWS={inicio:vInicio,rubros:vRubros,aportes:vAportes,proveedores:vProveedores,dashboard:vDashboard,copiloto:vCopiloto,home:vHome};
   function render(){document.getElementById("view").innerHTML=(VIEWS[view]||vInicio)();renderTop();save();}
-  function refreshAportesPeripherals(){var cb=document.getElementById("calBox");if(cb)cb.innerHTML=calendarHTML();var fb=document.getElementById("flowBox");if(fb)fb.innerHTML=flowHTML();}
+  function refreshAportesPeripherals(){var cb=document.getElementById("calBox");if(cb)cb.innerHTML=calendarHTML();var fb=document.getElementById("flowBox");if(fb)fb.innerHTML=chartHTML();}
 
   // ---------- modal ----------
   function openModal(html){document.getElementById("modalCard").innerHTML=html;document.getElementById("modal").style.display="flex";}
@@ -525,8 +601,8 @@
   document.getElementById("modal").addEventListener("click",function(e){if(e.target.id==="modal")closeModal();});
 
   // ---------- flujos de archivo ----------
-  function attachBoleta(iid){pickFile("image/*",function(file){makeThumbnail(file,600,function(thumb){var c=contrib();if(!c)return;var ins=c.installments.filter(function(x){return x.id===iid;})[0];if(!ins)return;pending={iid:iid,thumb:thumb,name:file.name};var det=sharesByContributor(c.id);var acctOpts='<option value="">— elige la cuenta —</option>'+det.map(function(d){return '<option value="'+d.rubroId+'"'+(ins.account===d.rubroId?" selected":"")+'>'+esc(d.name)+(d.vendor?" · "+esc(d.vendor):"")+'</option>';}).join("");openModal('<h3 style="font-size:18px;margin-bottom:6px">Confirmar abono</h3><p class="muted" style="font-size:13px;margin-bottom:12px">Boleta: '+esc(file.name)+'. Elige a qué cuenta va, revisa el monto y confirma.</p><img src="'+thumb+'" style="max-width:100%;max-height:180px;border-radius:8px;border:1px solid var(--line);margin-bottom:12px"><div class="fld" style="margin-bottom:10px"><label>Cuenta (proveedor)</label><select id="bAccount" style="width:100%">'+acctOpts+'</select></div><div class="fld" style="margin-bottom:6px"><label>Monto del abono (Q)</label><input type="number" id="bMonto" value="'+(ins.amount||0)+'" style="width:160px"></div><div style="font-size:11px;color:var(--ink3);margin-bottom:14px">En la app real, la IA leería el monto de la boleta y tú solo confirmarías.</div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-act="modal-close">Cancelar</button><button class="btn btn-primary" data-act="confirm-boleta">Confirmar abono</button></div>');});});}
-  function confirmBoleta(){if(!pending)return;var c=contrib();if(!c){closeModal();return;}var ins=c.installments.filter(function(x){return x.id===pending.iid;})[0];if(ins){var m=parseFloat(document.getElementById("bMonto").value);if(!isNaN(m))ins.amount=m;var acc=document.getElementById("bAccount");if(acc)ins.account=acc.value||ins.account||null;ins.paid=true;ins.boleta={thumb:pending.thumb,name:pending.name};}closeModal();render();}
+  function attachBoleta(iid){pickFile("image/*",function(file){makeThumbnail(file,600,function(thumb){var c=contrib();if(!c)return;var ins=c.installments.filter(function(x){return x.id===iid;})[0];if(!ins)return;pending={iid:iid,thumb:thumb,name:file.name};var det=sharesByContributor(c.id);var acctOpts='<option value="">— elige la cuenta —</option>'+det.map(function(d){return '<option value="'+d.rubroId+'"'+(ins.account===d.rubroId?" selected":"")+'>'+esc(d.name)+(d.vendor?" · "+esc(d.vendor):"")+'</option>';}).join("");openModal('<h3 style="font-size:18px;margin-bottom:6px">Confirmar abono</h3><p class="muted" style="font-size:13px;margin-bottom:12px">Boleta: '+esc(file.name)+'. Elige a qué cuenta va, revisa el monto y confirma.</p><img src="'+thumb+'" style="max-width:100%;max-height:180px;border-radius:8px;border:1px solid var(--line);margin-bottom:12px"><div class="fld" style="margin-bottom:10px"><label>Cuenta (proveedor)</label><select id="bAccount" style="width:100%">'+acctOpts+'</select></div><div class="fld" style="margin-bottom:6px"><label>Monto del abono (Q)</label><input type="number" id="bMonto" value="'+(+ins.paidAmount>0?ins.paidAmount:(+ins.planned||0))+'" style="width:160px"></div><div style="font-size:11px;color:var(--ink3);margin-bottom:14px">En la app real, la IA leería el monto de la boleta y tú solo confirmarías.</div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-act="modal-close">Cancelar</button><button class="btn btn-primary" data-act="confirm-boleta">Confirmar abono</button></div>');});});}
+  function confirmBoleta(){if(!pending)return;var c=contrib();if(!c){closeModal();return;}var ins=c.installments.filter(function(x){return x.id===pending.iid;})[0];if(ins){var m=parseFloat(document.getElementById("bMonto").value);if(!isNaN(m))ins.paidAmount=m;var acc=document.getElementById("bAccount");if(acc)ins.account=acc.value||ins.account||null;ins.paid=true;ins.boleta={thumb:pending.thumb,name:pending.name};}closeModal();render();}
   function attachProposal(rid){pickFile("application/pdf",function(file){readDataURL(file,function(url){var r=rubro(rid);if(r){r.proposal={name:file.name,size:file.size,url:url,at:new Date().toISOString().slice(0,10)};render();if(storageFull)alert("La propuesta se adjuntó, pero es muy grande para el guardado automático del navegador. Usa 'Exportar datos' para respaldarla.");}});});}
   function uploadVendorProposal(rid,vid){pickFile("application/pdf",function(file){readDataURL(file,function(url){var r=rubro(rid);var v=r?vendorById(r,vid):null;if(v){v.proposal={name:file.name,size:file.size,url:url,at:new Date().toISOString().slice(0,10)};render();openModal(vendorExpedienteHTML(rid,vid));if(storageFull)alert("La propuesta se adjuntó, pero es muy grande para el guardado automático del navegador. Usa 'Exportar datos' para respaldarla.");}});});}
 
@@ -542,7 +618,11 @@
     if(a==="export"){exportData();return;}
     if(a==="import"){importData();return;}
     if(a==="open-rubro"){view="proveedores";render();return;}
-    if(a==="add-pool"){state.pools.push({id:uid(),label:"Nueva bolsa"});render();return;}
+    if(a==="add-pool"){state.pools.push({id:uid(),label:"Nueva bolsa",goals:[]});render();return;}
+    if(a==="add-decision"){state.decisions.push({id:uid(),text:"Nueva decisión",tag:"Pendiente"});render();return;}
+    if(a==="dec-del"){state.decisions=state.decisions.filter(function(x){return x.id!==t.dataset.id;});render();return;}
+    if(a==="add-goal"){var pg2=state.pools.filter(function(x){return x.id===chartPool;})[0];if(pg2){if(!pg2.goals)pg2.goals=[];pg2.goals.push({id:uid(),date:"",amount:0});render();}return;}
+    if(a==="goal-del"){state.pools.forEach(function(p){if(p.goals)p.goals=p.goals.filter(function(x){return x.id!==t.dataset.id;});});render();return;}
     if(a==="del-pool"){var pl=state.pools.filter(function(x){return x.id===t.dataset.id;})[0];if(!pl)return;var used=state.rubros.filter(function(r){return r.poolId===t.dataset.id;}).length;if(used>0){alert("La bolsa \""+pl.label+"\" tiene "+used+" rubro(s). Muévelos a otra bolsa (desde Rubros) o elimínalos antes de borrarla.");return;}if(confirm("¿Eliminar la bolsa \""+pl.label+"\"?")){state.pools=state.pools.filter(function(x){return x.id!==t.dataset.id;});render();}return;}
     if(a==="assignee"){var r=rubro(t.dataset.id);var pid=t.dataset.person;var k=r.assignees.indexOf(pid);if(k>-1)r.assignees.splice(k,1);else r.assignees.push(pid);render();return;}
     if(a==="add-rubro"){state.rubros.push({id:uid(),name:"Nuevo rubro",cat:"deco",poolId:"boda",techo:0,vendor:null,status:"por_definir",comprometido:0,pagado:0,assignees:[],proposal:null,split:{base:"porcentaje",funders:[]}});render();return;}
@@ -552,15 +632,13 @@
     if(a==="auto-icon"){var ra=rubro(t.dataset.id);if(ra){delete ra.icon;closeModal();render();}return;}
     if(a==="funder-toggle"){var rf=rubro(t.dataset.id);var cd=t.dataset.cid;var ix=rf.split.funders.map(function(f){return f.cid;}).indexOf(cd);if(ix>-1)rf.split.funders.splice(ix,1);else rf.split.funders.push({cid:cd,pct:0,fixed:0});render();return;}
     if(a==="normalizar"){var rn=rubro(t.dataset.id);var fs=rn.split.funders;var s=fs.reduce(function(x,f){return x+(+f.pct||0);},0);if(s>0)fs.forEach(function(f){f.pct=Math.round((+f.pct||0)/s*100);});else fs.forEach(function(f){f.pct=Math.round(100/fs.length);});var d=100-fs.reduce(function(x,f){return x+f.pct;},0);if(fs.length)fs[0].pct+=d;render();return;}
-    if(a==="add-tea"){state.teas.push({id:uid(),name:"Nuevo té",date:"",amount:0});render();return;}
-    if(a==="del-tea"){state.teas=state.teas.filter(function(x){return x.id!==t.dataset.id;});render();return;}
-    if(a==="add-gift"){state.gifts.push({id:uid(),from:"",date:"",amount:0});render();return;}
-    if(a==="del-gift"){state.gifts=state.gifts.filter(function(x){return x.id!==t.dataset.id;});render();return;}
+    if(a==="add-aporte"){state.aportes.push({id:uid(),name:"Nuevo aporte",date:"",amount:0,poolId:"boda"});render();return;}
+    if(a==="del-aporte"){state.aportes=state.aportes.filter(function(x){return x.id!==t.dataset.id;});render();return;}
     if(a==="sel-contrib"){selContrib=t.dataset.id;render();return;}
     if(a==="add-contrib"){var c={id:uid(),name:"Nuevo aportante",ceiling:0,plan:"personalizado",confidence:"firme",installments:[]};state.contributors.push(c);selContrib=c.id;render();return;}
     if(a==="del-contrib"){var cc=contrib();if(cc&&confirm("¿Eliminar a "+cc.name+"?")){state.contributors=state.contributors.filter(function(x){return x.id!==selContrib;});selContrib=state.contributors[0]?state.contributors[0].id:null;render();}return;}
     if(a==="del-contrib-card"){var cid5=t.dataset.id;var c5=state.contributors.filter(function(x){return x.id===cid5;})[0];if(c5&&confirm("¿Eliminar a "+c5.name+"? También se quitará de los repartos.")){state.contributors=state.contributors.filter(function(x){return x.id!==cid5;});state.rubros.forEach(function(r){if(r.split&&r.split.funders)r.split.funders=r.split.funders.filter(function(f){return f.cid!==cid5;});});if(selContrib===cid5)selContrib=state.contributors[0]?state.contributors[0].id:null;render();}return;}
-    if(a==="add-ins"){var c2=contrib();if(c2){var last=c2.installments[c2.installments.length-1];c2.installments.push({id:uid(),date:last&&last.date?addMonths(last.date,1):"2026-09-05",amount:0,paid:false,boleta:null,account:null});render();}return;}
+    if(a==="add-ins"){var c2=contrib();if(c2){var last=c2.installments[c2.installments.length-1];c2.installments.push({id:uid(),date:last&&last.date?addMonths(last.date,1):"2026-09-05",planned:0,paidAmount:0,paid:false,boleta:null,account:null});render();}return;}
     if(a==="ins-del"){var c3=contrib();if(c3){c3.installments=c3.installments.filter(function(x){return x.id!==t.dataset.iid;});render();}return;}
     if(a==="gen-plan"){var c4=contrib();if(c4){var total=+document.getElementById("gTotal").value||0,n=+document.getElementById("gN").value||0,st=document.getElementById("gStart").value,sh=document.getElementById("gShape").value;var pl=generate(total,n,st,sh);if(pl.length){c4.installments=pl;c4.plan=sh;c4.planBase=assignedMap()[c4.id]||0;render();}}return;}
     if(a==="regen-plan"){var cr=contrib();if(cr){var asg=assignedMap()[cr.id]||0;var n=cr.installments.length||6;var st=(cr.installments[0]&&cr.installments[0].date)||"2026-09-05";var sh=cr.plan||"cuota_fija";var pl=generate(asg,n,st,sh);cr.installments=pl;cr.planBase=asg;render();}return;}
@@ -592,18 +670,21 @@
     if(a==="guests"){var cg=state.contributors.filter(function(x){return x.id===t.dataset.id;})[0];if(cg){cg.guests=+t.value||0;save();}return;}
     if(a==="funder-pct"){var rp=rubro(t.dataset.id);var f=rp.split.funders.filter(function(x){return x.cid===t.dataset.cid;})[0];if(f){f.pct=+t.value||0;save();}return;}
     if(a==="funder-fixed"){var rx=rubro(t.dataset.id);var ff=rx.split.funders.filter(function(x){return x.cid===t.dataset.cid;})[0];if(ff){ff.fixed=+t.value||0;save();}return;}
-    if(a==="tea-name"||a==="tea-date"||a==="tea-amt"){var tt=state.teas.filter(function(x){return x.id===t.dataset.id;})[0];if(tt){if(a==="tea-name")tt.name=t.value;else if(a==="tea-date")tt.date=t.value;else tt.amount=+t.value||0;save();}return;}
-    if(a==="gift-from"||a==="gift-date"||a==="gift-amt"){var gg=state.gifts.filter(function(x){return x.id===t.dataset.id;})[0];if(gg){if(a==="gift-from")gg.from=t.value;else if(a==="gift-date")gg.date=t.value;else gg.amount=+t.value||0;save();}return;}
-    var c=contrib();if(!c)return;if(a==="c-name"){c.name=t.value;save();return;}if(a==="c-ceil"){c.ceiling=+t.value||0;save();return;}var tr=t.closest("tr");if(!tr)return;var ins=c.installments.filter(function(x){return x.id===tr.dataset.iid;})[0];if(!ins)return;if(a==="ins-date"){ins.date=t.value;save();refreshAportesPeripherals();}if(a==="ins-amt"){ins.amount=+t.value||0;save();refreshAportesPeripherals();}});
+    if(a==="dec-text"){var dc=state.decisions.filter(function(x){return x.id===t.dataset.id;})[0];if(dc){dc.text=t.value;save();}return;}
+    if(a==="goal-amt"){state.pools.forEach(function(p){if(p.goals){var gg=p.goals.filter(function(x){return x.id===t.dataset.id;})[0];if(gg)gg.amount=+t.value||0;}});save();refreshAportesPeripherals();return;}
+    if(a==="aporte-name"||a==="aporte-date"||a==="aporte-amt"){var ap=state.aportes.filter(function(x){return x.id===t.dataset.id;})[0];if(ap){if(a==="aporte-name")ap.name=t.value;else if(a==="aporte-date")ap.date=t.value;else ap.amount=+t.value||0;save();}return;}
+    var c=contrib();if(!c)return;if(a==="c-name"){c.name=t.value;save();return;}if(a==="c-ceil"){c.ceiling=+t.value||0;save();return;}var tr=t.closest("tr");if(!tr)return;var ins=c.installments.filter(function(x){return x.id===tr.dataset.iid;})[0];if(!ins)return;if(a==="ins-date"){ins.date=t.value;save();refreshAportesPeripherals();}if(a==="ins-planned"){ins.planned=+t.value||0;save();refreshAportesPeripherals();}if(a==="ins-paidamt"){ins.paidAmount=+t.value||0;ins.paid=(+ins.paidAmount>0);save();render();}});
   root.addEventListener("change",function(e){var t=e.target;var a=t.dataset.act;if(!a)return;
     if(a==="fx"){render();return;}
     if(a==="v-cur"){var rc=rubro(t.dataset.rid);var vc=rc?vendorById(rc,t.dataset.vid):null;if(vc){vc.currency=t.value;render();openModal(vendorExpedienteHTML(t.dataset.rid,t.dataset.vid));}return;}
     if(a==="v-amt"){render();openModal(vendorExpedienteHTML(t.dataset.rid,t.dataset.vid));return;}
     if(a==="pool"){var r=rubro(t.dataset.id);if(r){r.poolId=t.value;save();}return;}
-    if(a==="ins-paid"){var c=contrib();if(c){var tr=t.closest("tr");var ins=c.installments.filter(function(x){return x.id===tr.dataset.iid;})[0];if(ins){ins.paid=t.checked;render();}}return;}
     if(a==="ins-account"){var ca=contrib();if(ca){var tra=t.closest("tr");var insa=ca.installments.filter(function(x){return x.id===tra.dataset.iid;})[0];if(insa){insa.account=t.value||null;render();}}return;}
     if(a==="split-base"){var rb=rubro(t.dataset.id);if(rb){rb.split.base=t.value;render();}return;}
-    if(a==="funder-pct"||a==="funder-fixed"||a==="techo"||a==="c-ceil"||a==="guests"||a==="tea-name"||a==="tea-date"||a==="tea-amt"||a==="gift-from"||a==="gift-date"||a==="gift-amt"){render();return;}
+    if(a==="chart-pool"){chartPool=t.value;render();return;}
+    if(a==="dec-tag"){var dt=state.decisions.filter(function(x){return x.id===t.dataset.id;})[0];if(dt){dt.tag=t.value;save();}return;}
+    if(a==="goal-date"){state.pools.forEach(function(p){if(p.goals){var gd=p.goals.filter(function(x){return x.id===t.dataset.id;})[0];if(gd)gd.date=t.value;}});render();return;}
+    if(a==="funder-pct"||a==="funder-fixed"||a==="techo"||a==="c-ceil"||a==="guests"||a==="aporte-name"||a==="aporte-date"||a==="aporte-amt"||a==="aporte-pool"){if(a==="aporte-pool"){var ap2=state.aportes.filter(function(x){return x.id===t.dataset.id;})[0];if(ap2)ap2.poolId=t.value;}render();return;}
   });
   function rubro(id){return state.rubros.filter(function(x){return x.id===id;})[0];}
   function contrib(){return state.contributors.filter(function(x){return x.id===selContrib;})[0];}
