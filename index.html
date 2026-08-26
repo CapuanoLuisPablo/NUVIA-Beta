@@ -86,6 +86,18 @@
   td input[type=number]{width:100px;text-align:right;}
   td input[type=date]{width:140px;}
   .row-del{color:var(--ink3);border:none;background:none;cursor:pointer;font-size:17px;padding:2px 6px;}
+  .ic-edit{cursor:pointer;position:relative;border:none;}
+  .ic-edit:hover{box-shadow:0 0 0 2px var(--teal);}
+  .ic-edit .pen{position:absolute;bottom:-4px;right:-4px;background:var(--surface);border:1px solid var(--line);border-radius:50%;width:16px;height:16px;font-size:9px;display:flex;align-items:center;justify-content:center;line-height:1;}
+  .name-edit{border:none;border-bottom:1px dashed var(--ink3);background:transparent;font-weight:600;font-size:15px;padding:2px 2px;font-family:inherit;color:var(--ink);min-width:130px;}
+  .name-edit:hover{border-bottom-color:var(--teal);}
+  .name-edit:focus{outline:none;border-bottom:2px solid var(--teal);}
+  .btn-del{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:5px 11px;font-size:13px;cursor:pointer;color:var(--ink2);display:inline-flex;align-items:center;gap:5px;font-weight:500;}
+  .btn-del:hover{background:var(--danger-tint);color:var(--danger-ink);border-color:#E7BDB2;}
+  .icon-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin:12px 0;}
+  .icon-opt{font-size:20px;padding:7px;border:1px solid var(--line);border-radius:9px;background:var(--surface);cursor:pointer;text-align:center;}
+  .icon-opt:hover{border-color:var(--teal);background:var(--tint2);}
+  .icon-opt.on{border:2px solid var(--teal);background:var(--tint);}
   .row-del:hover{color:var(--over);}
   .hint{font-size:12px;padding:7px 11px;border-radius:8px;margin-top:10px;display:inline-block;}
   .hint-ok{background:var(--tint);color:var(--teal-ink);} .hint-warn{background:var(--warn-tint);color:var(--warn-ink);} .hint-over{background:var(--danger-tint);color:var(--danger-ink);}
@@ -232,6 +244,7 @@
     if(r.selectedVendorId===undefined)r.selectedVendorId=null;
   });
   state.contributors.forEach(function(c){if(c.guests===undefined)c.guests=0;});
+  (function(){var am=assignedMap();state.contributors.forEach(function(c){if(c.planBase===undefined)c.planBase=am[c.id]||0;});})();
   if(!selContrib && state.contributors[0]) selContrib=state.contributors[0].id;
 
   // precio de un proveedor SIEMPRE en quetzales (convierte USD con el tipo de cambio)
@@ -247,8 +260,10 @@
   // ----- reparto (mecánica tipo Splitwise) -----
   function contribById(id){return state.contributors.filter(function(x){return x.id===id;})[0];}
   function pctSum(r){return r.split.funders.reduce(function(a,f){return a+(+f.pct||0);},0);}
+  // base de costo del rubro: si ya hay proveedor oficial, el costo real; si no, el techo (estimado)
+  function rubroCostBase(r){return (r.status==="contratado"&&r.comprometido>0)?r.comprometido:(r.techo||0);}
   function computeShares(r){
-    var T=r.techo||0, f=r.split.funders, n=f.length, base=r.split.base; if(!n)return [];
+    var T=rubroCostBase(r), f=r.split.funders, n=f.length, base=r.split.base; if(!n)return [];
     var raw;
     if(base==="fijo"){raw=f.map(function(x){return +x.fixed||0;});}
     else if(base==="iguales"){raw=f.map(function(){return T/n;});}
@@ -260,6 +275,8 @@
     return f.map(function(x,i){return {cid:x.cid,amount:amounts[i]};});
   }
   function assignedMap(){var m={};state.rubros.forEach(function(r){computeShares(r).forEach(function(s){m[s.cid]=(m[s.cid]||0)+s.amount;});});return m;}
+  // desglose: por cada rubro donde el aportante financia, cuánto le toca y con qué proveedor
+  function sharesByContributor(cid){var out=[];state.rubros.forEach(function(r){if(!(r.split&&r.split.funders))return;if(!r.split.funders.some(function(f){return f.cid===cid;}))return;var sh=computeShares(r).filter(function(s){return s.cid===cid;})[0];if(sh)out.push({rubroId:r.id,name:r.name,vendor:r.vendor,contratado:r.status==="contratado",amount:sh.amount,icon:rubroIcon(r)});});return out;}
   function statusBadge(s){return s==="contratado"?'<span class="badge b-success">Contratado</span>':s==="evaluacion"?'<span class="badge b-warn">En evaluación</span>':'<span class="badge b-neutral">Por definir</span>';}
   function avatars(ids){return (ids||[]).map(function(id){return '<span class="av" title="'+esc(personName(id))+'">'+initials(personName(id))+'</span>';}).join("");}
   function generate(total,n,start,shape){if(!total||!n||n<1||!start)return [];var w=[];for(var i=0;i<n;i++){w.push(shape==="cuota_fija"?1:shape==="suave_fuerte"?i+1:shape==="fuerte_suave"?n-i:shape==="anticipo_cuota"?(i===0?Math.max(1,(n-1)*1.6):1):1);}var sw=w.reduce(function(a,b){return a+b;},0),out=[],acc=0;for(var j=0;j<n;j++){var amt=Math.round((total*w[j]/sw)/50)*50;out.push({id:uid(),date:addMonths(start,j),amount:amt,paid:false,boleta:null});acc+=amt;}if(out.length)out[out.length-1].amount+=(total-acc);return out;}
@@ -267,35 +284,54 @@
   // ---------- vistas ----------
   function renderTop(){document.getElementById("wtitle").textContent=WEDDING.name;var days=Math.round((new Date(WEDDING.date+"T00:00:00")-new Date())/86400000);document.getElementById("wcount").textContent="Faltan "+days+" días · 3 jul 2027";Array.prototype.forEach.call(document.querySelectorAll(".tab"),function(t){t.classList.toggle("active",t.dataset.view===view);});}
 
+  function rubroMiniCard(r){
+    var funderInits=(r.split&&r.split.funders?r.split.funders:[]).map(function(f){var c=contribById(f.cid);return c?'<span class="av" title="'+esc(c.name)+'">'+initials(c.name)+'</span>':"";}).join("");
+    return '<div class="card" style="padding:13px;cursor:pointer" data-act="open-rubro" data-id="'+r.id+'">'+
+      '<div style="display:flex;align-items:center;gap:9px;margin-bottom:8px;"><span class="ic" style="width:32px;height:32px;font-size:16px">'+rubroIcon(r)+'</span>'+
+      '<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px">'+esc(r.name)+'</div><div style="font-size:12px;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.vendor||"Sin proveedor")+'</div></div></div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;">'+statusBadge(r.status)+'<span style="font-size:12px;color:var(--ink2)" class="num">'+fmtQ(r.techo)+'</span></div>'+
+      (funderInits?'<div style="display:flex;margin-top:8px">'+funderInits+'</div>':'')+'</div>';
+  }
   function vInicio(){
     var bt=budgetTotals(), ft=fundingTotals();
-    var cards=state.rubros.map(function(r){
-      var funderInits=(r.split&&r.split.funders?r.split.funders:[]).map(function(f){var c=contribById(f.cid);return c?'<span class="av" title="'+esc(c.name)+'">'+initials(c.name)+'</span>':"";}).join("");
-      return '<div class="card" style="padding:14px;cursor:pointer" data-act="open-rubro" data-id="'+r.id+'">'+
-        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><span class="ic">'+(CATICON[r.cat]||"•")+'</span>'+
-        '<div style="flex:1"><div style="font-weight:600">'+esc(r.name)+'</div><div style="font-size:12px;color:var(--ink2)">'+esc(r.vendor||"Sin proveedor")+'</div></div></div>'+
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'+statusBadge(r.status)+'<span style="font-size:12px;color:var(--ink2)" class="num">'+fmtQ(r.techo)+'</span></div>'+
-        '<div style="display:flex;justify-content:space-between;align-items:center;"><div style="display:flex">'+(funderInits||'<span style="font-size:11px;color:var(--ink3)">sin aportantes</span>')+'</div><span style="font-size:11px;color:var(--ink3)">'+esc(poolLabel(r.poolId))+'</span></div></div>';
-    }).join("");
-    return '<div class="card" style="background:var(--tint);border-color:#CDEBDF;display:flex;flex-wrap:wrap;gap:18px;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
+    var hero='<div class="card" style="background:var(--tint);border-color:#CDEBDF;display:flex;flex-wrap:wrap;gap:18px;justify-content:space-between;align-items:center;margin-bottom:18px;">'+
       '<div><div style="font-size:12px;color:var(--teal)">Nuestra boda</div><h2 style="font-size:24px;color:var(--teal-ink)">Luis Pablo &amp; Daniela</h2><div style="font-size:14px;color:var(--teal);margin-top:4px">3 de julio de 2027 · Hacienda Nueva</div></div>'+
-      '<div style="min-width:210px"><div style="font-size:13px;color:var(--teal);margin-bottom:6px" class="num">'+fmtQ(ft.prometido)+' prometido de '+fmtQ(WEDDING.meta)+'</div><div class="bar" style="background:#fff"><span style="width:'+(bt.pag/WEDDING.meta*100)+'%;background:var(--paid)"></span><span style="width:'+(bt.comp/WEDDING.meta*100)+'%;background:var(--committed)"></span><span style="width:'+(ft.prometido/WEDDING.meta*100)+'%;background:var(--available);opacity:.5"></span></div></div></div>'+
-      '<div class="sec-title"><h2>Nuestros proveedores</h2><span class="muted" style="font-size:13px">Toca una tarjeta para ver el detalle</span></div><div class="grid g3">'+cards+'</div>';
+      '<div style="min-width:210px"><div style="font-size:13px;color:var(--teal);margin-bottom:6px" class="num">'+fmtQ(ft.prometido)+' prometido de '+fmtQ(WEDDING.meta)+'</div><div class="bar" style="background:#fff"><span style="width:'+(bt.pag/WEDDING.meta*100)+'%;background:var(--paid)"></span><span style="width:'+(bt.comp/WEDDING.meta*100)+'%;background:var(--committed)"></span><span style="width:'+(ft.prometido/WEDDING.meta*100)+'%;background:var(--available);opacity:.5"></span></div></div></div>';
+    var groups=state.pools.map(function(p){
+      var rs=state.rubros.filter(function(r){return r.poolId===p.id;});
+      var total=rs.reduce(function(s,r){return s+(r.techo||0);},0);
+      var cards=rs.map(rubroMiniCard).join("")||'<span class="muted" style="font-size:13px">Sin rubros en esta bolsa. Agrégalos desde la pestaña Rubros.</span>';
+      return '<div class="card" style="margin-bottom:14px">'+
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap"><span style="font-size:18px">👛</span>'+
+        '<span style="display:inline-flex;align-items:center;gap:5px"><input class="name-edit" data-act="pool-name" data-id="'+p.id+'" value="'+esc(p.label)+'" title="Toca para renombrar la bolsa"><span style="font-size:11px;color:var(--ink3)">✎</span></span>'+
+        '<span style="font-size:12px;color:var(--ink2);margin-left:6px">'+rs.length+' rubro'+(rs.length===1?"":"s")+' · <strong class="num">'+fmtQ(total)+'</strong></span>'+
+        '<button class="btn-del" data-act="del-pool" data-id="'+p.id+'" style="margin-left:auto">🗑 Eliminar</button></div>'+
+        '<div class="grid g3">'+cards+'</div></div>';
+    }).join("");
+    return hero+'<div class="sec-title"><h2>Bolsas y rubros</h2><button class="btn btn-primary btn-sm" data-act="add-pool">+ Agregar bolsa</button></div><p class="muted" style="font-size:13px;margin-bottom:14px">Tus rubros agrupados por <strong>bolsa</strong>. Toca el nombre de una bolsa para renombrarla, o <strong>🗑 Eliminar</strong> para borrarla (debe estar vacía). Toca un rubro para ver su detalle.</p>'+groups;
   }
 
+  function eventBarHTML(){return '<div class="soft" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px"><span style="font-size:13px;color:var(--ink2)">Evento</span><select style="font-weight:600"><option>💍 Boda · Luis Pablo &amp; Daniela</option></select><span class="badge b-neutral">Próximamente: compras, inversiones y más eventos</span></div>';}
+  var ICON_CHOICES=["🏛️","🍽️","🎵","📷","🎬","💐","🎨","🍷","🎂","💍","👗","🤵","💄","🚗","💌","🥂","🍾","🎉","🎪","🕯️","📄","🎁","✈️","🏨","⭐","💰","🌸","🎩","💒","🍰"];
+  function autoIcon(name){var n=(name||"").toLowerCase();var map=[["venue|sal[oó]n|hacienda|lugar|jard[ií]n","🏛️"],["banquete|comida|catering|men[uú]|cena","🍽️"],["m[uú]sica|dj|banda|sonido","🎵"],["foto","📷"],["video|film","🎬"],["decor|flor","💐"],["licor|bar|bebida|vino|c[oó]ctel","🍷"],["pastel|torta|cake|postre","🎂"],["argolla|anillo|ring","💍"],["vestido","👗"],["traje|smoking","🤵"],["maquillaje|makeup|belleza","💄"],["transporte|carro|bus|veh[ií]culo","🚗"],["invitaci|save the date|papeler","💌"],["hotel|hospedaje|alojamiento","🏨"],["regalo","🎁"],["viaje|luna de miel","✈️"]];for(var i=0;i<map.length;i++){if(new RegExp(map[i][0]).test(n))return map[i][1];}return "🎉";}
+  function rubroIcon(r){return r.icon||CATICON[r.cat]||autoIcon(r.name);}
   function vRubros(){
     var rows=state.rubros.map(function(r){
       var disp=rubroDisp(r), over=r.comprometido>r.techo;
       var poolOpts=state.pools.map(function(p){return '<option value="'+p.id+'"'+(p.id===r.poolId?" selected":"")+'>'+esc(p.label)+'</option>';}).join("");
-      return '<div class="rubro-row"><div class="rubro-head"><span class="ic">'+(CATICON[r.cat]||"•")+'</span><span class="nm">'+esc(r.name)+'</span>'+statusBadge(r.status)+'<span style="margin-left:auto;font-size:12px;color:var(--ink2)">Disponible: <strong class="num">'+fmtQ(disp)+'</strong></span></div>'+
-        '<div class="bar" style="margin-bottom:10px"><span style="width:'+(r.pagado/Math.max(r.techo,1)*100)+'%;background:var(--paid)"></span><span style="width:'+(Math.max(0,r.comprometido-r.pagado)/Math.max(r.techo,1)*100)+'%;background:'+(over?"var(--over)":"var(--committed)")+'"></span></div>'+
+      return '<div class="rubro-row"><div class="rubro-head">'+
+        '<button class="ic ic-edit" data-act="pick-icon" data-id="'+r.id+'" title="Cambiar ícono">'+rubroIcon(r)+'<span class="pen">✎</span></button>'+
+        '<div style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="display:inline-flex;align-items:center;gap:5px"><input data-act="rubro-name" data-id="'+r.id+'" value="'+esc(r.name)+'" class="name-edit" title="Toca para editar el nombre"><span style="font-size:11px;color:var(--ink3)">✎</span></span>'+statusBadge(r.status)+'</div>'+
+        '<span style="font-size:12px;color:var(--ink2);text-align:right;margin-right:6px">Disponible<br><strong class="num">'+fmtQ(disp)+'</strong></span>'+
+        '<button class="btn-del" data-act="del-rubro" data-id="'+r.id+'">🗑 Eliminar</button></div>'+
+        '<div class="bar" style="margin:4px 0 10px"><span style="width:'+(r.pagado/Math.max(r.techo,1)*100)+'%;background:var(--paid)"></span><span style="width:'+(Math.max(0,r.comprometido-r.pagado)/Math.max(r.techo,1)*100)+'%;background:'+(over?"var(--over)":"var(--committed)")+'"></span></div>'+
         '<div class="ctrl-row"><div class="fld"><label>Bolsa que lo financia</label><select data-act="pool" data-id="'+r.id+'">'+poolOpts+'</select></div><div class="fld"><label>Techo (Q)</label><input type="number" step="500" data-act="techo" data-id="'+r.id+'" value="'+r.techo+'" style="width:120px"></div></div>'+
         repartoHTML(r)+'</div>';
     }).join("");
-    return '<div class="sec-title"><h2>Rubros — bolsa y reparto</h2><button class="btn btn-sm" data-act="add-rubro">+ Agregar rubro</button></div><p class="muted" style="font-size:13px;margin-bottom:14px">Cada rubro se financia desde una <strong>bolsa</strong> y su costo se reparte entre <strong>aportantes</strong> (por porcentaje, partes iguales, capacidad o montos fijos).</p>'+rows;
+    return eventBarHTML()+'<div class="sec-title"><h2>Rubros — bolsa y reparto</h2><button class="btn btn-primary btn-sm" data-act="add-rubro">+ Agregar rubro</button></div><p class="muted" style="font-size:13px;margin-bottom:14px">Toca el <strong>ícono</strong> para cambiarlo, el <strong>nombre</strong> para editarlo, o <strong>🗑 Eliminar</strong> para borrar el rubro.</p>'+rows;
   }
   function repartoHTML(r){
-    var T=r.techo||0, base=r.split.base, amap=assignedMap();
+    var T=rubroCostBase(r), base=r.split.base, amap=assignedMap();
     var shares=computeShares(r), shareMap={}; shares.forEach(function(s){shareMap[s.cid]=s.amount;});
     var funderChips=state.contributors.map(function(c){var on=r.split.funders.some(function(f){return f.cid===c.id;});return '<span class="chip-p'+(on?" on":"")+'" data-act="funder-toggle" data-id="'+r.id+'" data-cid="'+c.id+'">'+esc(c.name)+'</span>';}).join("");
     var baseOpts=[["porcentaje","Porcentaje"],["iguales","Partes iguales"],["capacidad","Proporcional a capacidad"],["fijo","Montos fijos"]].map(function(o){return '<option value="'+o[0]+'"'+(o[0]===base?" selected":"")+'>'+o[1]+'</option>';}).join("");
@@ -311,7 +347,8 @@
     var overNames=r.split.funders.filter(function(f){var c=contribById(f.cid);return c&&((amap[f.cid]||0)>(c.ceiling||0));}).map(function(f){return contribById(f.cid).name;});
     if(overNames.length)alarms+='<span class="hint hint-over" style="display:block;margin-top:6px">⛔ El reparto excede el techo de '+esc(overNames.join(", "))+'. Baja su porcentaje o usa "Proporcional a capacidad".</span>';
     var coverOk=r.split.funders.length&&!overNames.length&&(base==="iguales"||base==="capacidad"||(base==="porcentaje"&&pctSum(r)===100)||(base==="fijo"&&sumShares===T));
-    var totalLine='<div style="margin-top:8px;font-size:12px;color:'+(coverOk?"var(--success-ink)":"var(--ink2)")+'">Reparto: <strong class="num">'+fmtQ(sumShares)+'</strong> de <strong class="num">'+fmtQ(T)+'</strong>'+(coverOk?" ✓ cubre el bolsón exacto":"")+'</div>';
+    var baseLbl=(r.status==="contratado"&&r.comprometido>0)?"costo contratado":"presupuesto (estimado)";
+    var totalLine='<div style="margin-top:8px;font-size:12px;color:'+(coverOk?"var(--success-ink)":"var(--ink2)")+'">Reparto: <strong class="num">'+fmtQ(sumShares)+'</strong> de <strong class="num">'+fmtQ(T)+'</strong> <span class="muted">('+baseLbl+')</span>'+(coverOk?" ✓ cubre el bolsón exacto":"")+'</div>';
     return '<div style="background:var(--raise);border:1px solid var(--line);border-radius:11px;padding:12px;margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px"><strong style="font-size:13px">Reparto del bolsón · quién lo financia</strong><select data-act="split-base" data-id="'+r.id+'" style="font-size:13px">'+baseOpts+'</select></div><div style="font-size:11px;color:var(--ink2);margin-bottom:5px">Aportantes del bolsón (toca para agregar; el % siempre respeta su techo)</div><div class="chips" style="margin-bottom:6px">'+funderChips+'</div>'+(rows||'<span class="muted" style="font-size:12px">Aún no hay aportantes en este bolsón.</span>')+totalLine+alarms+'</div>';
   }
 
@@ -332,17 +369,35 @@
   function planEditorHTML(){
     var c=state.contributors.filter(function(x){return x.id===selContrib;})[0];
     if(!c)return "<p>Selecciona un aportante.</p>";
-    var planned=c.installments.reduce(function(s,i){return s+(i.amount||0);},0),diff=(c.ceiling||0)-planned;
-    var hint=c.ceiling>0&&diff>0?'<span class="hint hint-warn">Faltan '+fmtQ(diff)+' por planificar.</span>':c.ceiling>0&&diff<0?'<span class="hint hint-over">Supera el techo por '+fmtQ(-diff)+'.</span>':c.ceiling>0?'<span class="hint hint-ok">El plan cubre el techo exacto.</span>':"";
+    var planned=c.installments.reduce(function(s,i){return s+(i.amount||0);},0);
+    var asg=(assignedMap()[c.id]||0), techo=c.ceiling||0, pend=techo-asg;
+    // ---- desglose de lo que le toca por proveedor/rubro ----
+    var det=sharesByContributor(c.id);
+    var detRows=det.map(function(d){
+      return '<div style="display:flex;align-items:center;gap:9px;padding:6px 0;border-top:1px solid var(--line);font-size:13px"><span>'+d.icon+'</span><span style="flex:1"><strong>'+esc(d.name)+'</strong>'+(d.vendor?' · '+esc(d.vendor):' · <span class="muted">sin proveedor · estimado</span>')+'</span><span class="num" style="font-weight:600">'+fmtQ(d.amount)+'</span></div>';
+    }).join("");
+    var pendTxt=techo<=0?'<span class="muted">techo sin definir</span>':pend>=0?'<span style="color:var(--teal-ink)">Pendiente hasta su techo: <strong class="num">'+fmtQ(pend)+'</strong></span>':'<span style="color:var(--over)">⛔ Excede su techo por <strong class="num">'+fmtQ(-pend)+'</strong></span>';
+    var desglose='<div style="background:var(--raise);border:1px solid var(--line);border-radius:11px;padding:12px;margin-bottom:12px"><div style="font-size:12px;font-weight:600;margin-bottom:2px">Lo que le toca pagar (según los repartos)</div>'+
+      (detRows||'<span class="muted" style="font-size:12px">Aún no está asignado a ningún rubro. Agrégalo en el reparto de un rubro.</span>')+
+      '<div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--line);margin-top:6px;padding-top:8px;font-size:13px"><span style="font-weight:600">Total asignado</span><span class="num" style="font-weight:700">'+fmtQ(asg)+'</span></div>'+
+      '<div style="font-size:12px;margin-top:6px">'+pendTxt+'</div></div>';
+    // ---- aviso: lo asignado cambió desde que se generó el plan ----
+    var alertBox="";
+    if(c.installments.length>0 && c.planBase!==undefined && c.planBase!==asg){
+      alertBox='<div class="hint hint-warn" style="display:block;margin-bottom:12px">🔔 Lo asignado a '+esc(c.name)+' cambió de <strong class="num">'+fmtQ(c.planBase)+'</strong> a <strong class="num">'+fmtQ(asg)+'</strong> (elegiste un proveedor o cambió un reparto). '+
+        '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" data-act="regen-plan">Regenerar plan con '+fmtQ(asg)+'</button><button class="btn btn-sm" data-act="keep-plan">Mantener mi plan</button></div></div>';
+    }
     var rows=c.installments.slice().sort(function(a,b){return (a.date||"")<(b.date||"")?-1:1;}).map(function(i){
       var bol=i.boleta?'<img class="thumb" src="'+i.boleta.thumb+'" data-act="view-boleta" data-iid="'+i.id+'" title="Ver boleta">':'<button class="btn btn-sm" data-act="boleta" data-iid="'+i.id+'">📎 Boleta</button>';
       return '<tr data-iid="'+i.id+'"><td><input type="date" data-act="ins-date" value="'+(i.date||"")+'"></td><td><input type="number" step="50" data-act="ins-amt" value="'+(i.amount||0)+'"></td><td style="text-align:center"><input type="checkbox" data-act="ins-paid" '+(i.paid?"checked":"")+'></td><td style="text-align:center">'+bol+'</td><td style="text-align:right"><button class="row-del" data-act="ins-del" data-iid="'+i.id+'">×</button></td></tr>';
     }).join("");
-    var asg=(assignedMap()[c.id]||0), asgOver=asg>(c.ceiling||0);
+    var diff=asg-planned;
+    var hint=asg>0&&diff>0?'<span class="hint hint-warn">Faltan '+fmtQ(diff)+' del asignado por planificar.</span>':asg>0&&diff<0?'<span class="hint hint-ok">El plan cubre más que lo asignado ('+fmtQ(-diff)+' extra).</span>':asg>0?'<span class="hint hint-ok">El plan cubre exacto lo asignado.</span>':"";
+    var genTotal=asg>0?asg:techo;
     return '<div class="sec-title"><h2>Plan de pagos · '+esc(c.name)+'</h2><button class="btn-ghost" data-act="del-contrib">Eliminar</button></div>'+
-      '<div class="ctrl-row"><div class="fld"><label>Nombre</label><input data-act="c-name" value="'+esc(c.name)+'" style="width:170px"></div><div class="fld"><label>Techo prometido (Q)</label><input type="number" step="500" data-act="c-ceil" value="'+(c.ceiling||0)+'" style="width:120px"></div></div>'+
-      '<div style="font-size:12px;color:'+(asgOver?"var(--over)":"var(--ink2)")+';margin-bottom:12px">Asignado en bolsones (Rubros): <strong class="num">'+fmtQ(asg)+'</strong> de su techo '+fmtQ(c.ceiling||0)+(asgOver?" · ⛔ excede su techo":"")+'</div>'+
-      '<div class="genrow"><div class="fld"><label>Total (Q)</label><input type="number" id="gTotal" value="'+(c.ceiling||0)+'"></div><div class="fld"><label># cuotas</label><input type="number" id="gN" min="1" value="6"></div><div class="fld"><label>Primera</label><input type="date" id="gStart" value="'+((c.installments[0]&&c.installments[0].date)||"2026-09-05")+'" style="width:150px"></div><div class="fld"><label>Forma</label><select id="gShape"><option value="cuota_fija">Cuota fija</option><option value="suave_fuerte">Suave → fuerte</option><option value="fuerte_suave">Fuerte → suave</option><option value="anticipo_cuota">Anticipo + cuota</option></select></div><button class="btn btn-primary btn-sm" data-act="gen-plan">Generar</button></div>'+
+      '<div class="ctrl-row"><div class="fld"><label>Nombre</label><input data-act="c-name" value="'+esc(c.name)+'" style="width:170px"></div><div class="fld"><label>Techo prometido (Q)</label><input type="number" step="500" data-act="c-ceil" value="'+techo+'" style="width:120px"></div></div>'+
+      desglose+alertBox+
+      '<div class="genrow"><div class="fld"><label>Total (Q) · sug. lo asignado</label><input type="number" id="gTotal" value="'+genTotal+'"></div><div class="fld"><label># cuotas</label><input type="number" id="gN" min="1" value="6"></div><div class="fld"><label>Primera</label><input type="date" id="gStart" value="'+((c.installments[0]&&c.installments[0].date)||"2026-09-05")+'" style="width:150px"></div><div class="fld"><label>Forma</label><select id="gShape"><option value="cuota_fija">Cuota fija</option><option value="suave_fuerte">Suave → fuerte</option><option value="fuerte_suave">Fuerte → suave</option><option value="anticipo_cuota">Anticipo + cuota</option></select></div><button class="btn btn-primary btn-sm" data-act="gen-plan">Generar</button></div>'+
       '<table><thead><tr><th>Fecha</th><th style="text-align:right">Monto</th><th style="text-align:center">Pagado</th><th style="text-align:center">Boleta</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="5" class="muted" style="padding:12px 8px">Sin cuotas. Genera un plan o agrega una.</td></tr>')+'</tbody></table>'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px"><button class="btn btn-sm" data-act="add-ins">+ Agregar cuota</button><span style="font-weight:600" class="num">Total: '+fmtQ(planned)+'</span></div>'+hint;
   }
@@ -368,7 +423,7 @@
         '</div>';
       }).join("");
       var cmpNote=vs.length>=2?'<span class="badge b-teal" style="margin-left:6px">Comparando '+vs.length+'</span>':'';
-      return '<div class="card" style="margin-bottom:12px"><div class="sec-title" style="margin-bottom:8px"><div style="display:flex;align-items:center;gap:10px"><span class="ic">'+(CATICON[r.cat]||"•")+'</span><div><div style="font-weight:600">'+esc(r.name)+'</div><div style="font-size:12px;color:var(--ink2)">Techo '+fmtQ(r.techo)+' · '+(r.status==="contratado"?("Oficial: "+esc(r.vendor)):(vs.length?"En evaluación":"Sin proveedores"))+cmpNote+'</div></div></div><button class="btn btn-sm" data-act="add-vendor" data-rid="'+r.id+'">+ Agregar proveedor</button></div>'+
+      return '<div class="card" style="margin-bottom:12px"><div class="sec-title" style="margin-bottom:8px"><div style="display:flex;align-items:center;gap:10px"><span class="ic">'+rubroIcon(r)+'</span><div><div style="font-weight:600">'+esc(r.name)+'</div><div style="font-size:12px;color:var(--ink2)">Techo '+fmtQ(r.techo)+' · '+(r.status==="contratado"?("Oficial: "+esc(r.vendor)):(vs.length?"En evaluación":"Sin proveedores"))+cmpNote+'</div></div></div><button class="btn btn-sm" data-act="add-vendor" data-rid="'+r.id+'">+ Agregar proveedor</button></div>'+
         (vendorRows||'<span class="muted" style="font-size:13px">Aún no agregas proveedores a este rubro. Usa "+ Agregar proveedor".</span>')+'</div>';
     }).join("");
     return '<div class="sec-title" style="margin-top:6px"><h2>Proveedores</h2><span class="muted" style="font-size:13px">Agrega proveedores a cualquier rubro, sube su propuesta y elige el oficial</span></div>'+fxbar+sections;
@@ -396,7 +451,7 @@
   function vDashboard(){
     var bt=budgetTotals(), ft=fundingTotals();
     // selector de evento (hoy Boda; diseñado para múltiples eventos a futuro)
-    var eventBar='<div class="soft" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px"><span style="font-size:13px;color:var(--ink2)">Evento</span><select style="font-weight:600"><option>💍 Boda · Luis Pablo &amp; Daniela</option></select><span class="badge b-neutral">Próximamente: compras, inversiones y más eventos</span></div>';
+    var eventBar=eventBarHTML();
     var kpis=[["Techo oficial",fmtQ(bt.techo)],["Comprometido",fmtQ(bt.comp)],["Disponible",fmtQ(bt.disp)],["Brecha de fondeo",fmtQ(ft.brecha)]].map(function(x,idx){return '<div class="soft"><div class="kpi-label">'+x[0]+'</div><div class="kpi-val num"'+(idx===3&&ft.brecha>0?' style="color:var(--warn-ink)"':'')+'>'+x[1]+'</div></div>';}).join("");
 
     // ---- OVERLOOK: invitados, meta, total de la boda, costo por invitado, costo justo ----
@@ -476,8 +531,14 @@
     if(a==="export"){exportData();return;}
     if(a==="import"){importData();return;}
     if(a==="open-rubro"){view="proveedores";render();return;}
+    if(a==="add-pool"){state.pools.push({id:uid(),label:"Nueva bolsa"});render();return;}
+    if(a==="del-pool"){var pl=state.pools.filter(function(x){return x.id===t.dataset.id;})[0];if(!pl)return;var used=state.rubros.filter(function(r){return r.poolId===t.dataset.id;}).length;if(used>0){alert("La bolsa \""+pl.label+"\" tiene "+used+" rubro(s). Muévelos a otra bolsa (desde Rubros) o elimínalos antes de borrarla.");return;}if(confirm("¿Eliminar la bolsa \""+pl.label+"\"?")){state.pools=state.pools.filter(function(x){return x.id!==t.dataset.id;});render();}return;}
     if(a==="assignee"){var r=rubro(t.dataset.id);var pid=t.dataset.person;var k=r.assignees.indexOf(pid);if(k>-1)r.assignees.splice(k,1);else r.assignees.push(pid);render();return;}
     if(a==="add-rubro"){state.rubros.push({id:uid(),name:"Nuevo rubro",cat:"deco",poolId:"boda",techo:0,vendor:null,status:"por_definir",comprometido:0,pagado:0,assignees:[],proposal:null,split:{base:"porcentaje",funders:[]}});render();return;}
+    if(a==="del-rubro"){var rd=rubro(t.dataset.id);if(rd&&confirm("¿Eliminar el rubro \""+rd.name+"\"?")){state.rubros=state.rubros.filter(function(x){return x.id!==t.dataset.id;});render();}return;}
+    if(a==="pick-icon"){var rp=rubro(t.dataset.id);if(rp){var cur=rp.icon||"";var grid=ICON_CHOICES.map(function(ic){return '<button class="icon-opt'+(ic===cur?" on":"")+'" data-act="set-icon" data-id="'+rp.id+'" data-icon="'+ic+'">'+ic+'</button>';}).join("");openModal('<h3 style="font-size:18px;margin-bottom:4px">Ícono de '+esc(rp.name)+'</h3><p class="muted" style="font-size:13px;margin-bottom:6px">Elige uno o deja que Nuvia lo elija según el nombre.</p><div class="icon-grid">'+grid+'</div><div style="display:flex;justify-content:space-between;align-items:center"><button class="btn btn-sm" data-act="auto-icon" data-id="'+rp.id+'">✨ Automático según el nombre</button><button class="btn btn-sm" data-act="modal-close">Cerrar</button></div>');}return;}
+    if(a==="set-icon"){var rs=rubro(t.dataset.id);if(rs){rs.icon=t.dataset.icon;closeModal();render();}return;}
+    if(a==="auto-icon"){var ra=rubro(t.dataset.id);if(ra){delete ra.icon;closeModal();render();}return;}
     if(a==="funder-toggle"){var rf=rubro(t.dataset.id);var cd=t.dataset.cid;var ix=rf.split.funders.map(function(f){return f.cid;}).indexOf(cd);if(ix>-1)rf.split.funders.splice(ix,1);else rf.split.funders.push({cid:cd,pct:0,fixed:0});render();return;}
     if(a==="normalizar"){var rn=rubro(t.dataset.id);var fs=rn.split.funders;var s=fs.reduce(function(x,f){return x+(+f.pct||0);},0);if(s>0)fs.forEach(function(f){f.pct=Math.round((+f.pct||0)/s*100);});else fs.forEach(function(f){f.pct=Math.round(100/fs.length);});var d=100-fs.reduce(function(x,f){return x+f.pct;},0);if(fs.length)fs[0].pct+=d;render();return;}
     if(a==="add-tea"){state.teas.push({id:uid(),name:"Nuevo té",date:"",amount:0});render();return;}
@@ -490,7 +551,9 @@
     if(a==="del-contrib-card"){var cid5=t.dataset.id;var c5=state.contributors.filter(function(x){return x.id===cid5;})[0];if(c5&&confirm("¿Eliminar a "+c5.name+"? También se quitará de los repartos.")){state.contributors=state.contributors.filter(function(x){return x.id!==cid5;});state.rubros.forEach(function(r){if(r.split&&r.split.funders)r.split.funders=r.split.funders.filter(function(f){return f.cid!==cid5;});});if(selContrib===cid5)selContrib=state.contributors[0]?state.contributors[0].id:null;render();}return;}
     if(a==="add-ins"){var c2=contrib();if(c2){var last=c2.installments[c2.installments.length-1];c2.installments.push({id:uid(),date:last&&last.date?addMonths(last.date,1):"2026-09-05",amount:0,paid:false,boleta:null});render();}return;}
     if(a==="ins-del"){var c3=contrib();if(c3){c3.installments=c3.installments.filter(function(x){return x.id!==t.dataset.iid;});render();}return;}
-    if(a==="gen-plan"){var c4=contrib();if(c4){var total=+document.getElementById("gTotal").value||0,n=+document.getElementById("gN").value||0,st=document.getElementById("gStart").value,sh=document.getElementById("gShape").value;var pl=generate(total,n,st,sh);if(pl.length){c4.installments=pl;c4.plan=sh;render();}}return;}
+    if(a==="gen-plan"){var c4=contrib();if(c4){var total=+document.getElementById("gTotal").value||0,n=+document.getElementById("gN").value||0,st=document.getElementById("gStart").value,sh=document.getElementById("gShape").value;var pl=generate(total,n,st,sh);if(pl.length){c4.installments=pl;c4.plan=sh;c4.planBase=assignedMap()[c4.id]||0;render();}}return;}
+    if(a==="regen-plan"){var cr=contrib();if(cr){var asg=assignedMap()[cr.id]||0;var n=cr.installments.length||6;var st=(cr.installments[0]&&cr.installments[0].date)||"2026-09-05";var sh=cr.plan||"cuota_fija";var pl=generate(asg,n,st,sh);cr.installments=pl;cr.planBase=asg;render();}return;}
+    if(a==="keep-plan"){var ck=contrib();if(ck){ck.planBase=assignedMap()[ck.id]||0;save();render();}return;}
     if(a==="boleta"){attachBoleta(t.dataset.iid);return;}
     if(a==="view-boleta"){var c5=contrib();var ins=c5.installments.filter(function(x){return x.id===t.dataset.iid;})[0];if(ins&&ins.boleta)openModal('<h3 style="font-size:17px;margin-bottom:10px">Boleta · '+esc(ins.boleta.name)+'</h3><img src="'+ins.boleta.thumb+'" style="max-width:100%;border-radius:8px;border:1px solid var(--line)"><div style="text-align:right;margin-top:12px"><button class="btn" data-act="modal-close">Cerrar</button></div>');return;}
     if(a==="confirm-boleta"){confirmBoleta();return;}
@@ -513,6 +576,8 @@
     if(a==="fx"){state.fx=+t.value||7.95;save();return;}
     if(a==="v-name"||a==="v-amt"||a==="v-note"){var rr=rubro(t.dataset.rid);var v=rr?vendorById(rr,t.dataset.vid):null;if(v){if(a==="v-name")v.name=t.value;else if(a==="v-amt")v.amount=+t.value||0;else v.note=t.value;save();}return;}
     if(a==="techo"){var r=rubro(t.dataset.id);if(r){r.techo=+t.value||0;save();}return;}
+    if(a==="rubro-name"){var rn=rubro(t.dataset.id);if(rn){rn.name=t.value;save();}return;}
+    if(a==="pool-name"){var pn=state.pools.filter(function(x){return x.id===t.dataset.id;})[0];if(pn){pn.label=t.value;save();}return;}
     if(a==="guests"){var cg=state.contributors.filter(function(x){return x.id===t.dataset.id;})[0];if(cg){cg.guests=+t.value||0;save();}return;}
     if(a==="funder-pct"){var rp=rubro(t.dataset.id);var f=rp.split.funders.filter(function(x){return x.cid===t.dataset.cid;})[0];if(f){f.pct=+t.value||0;save();}return;}
     if(a==="funder-fixed"){var rx=rubro(t.dataset.id);var ff=rx.split.funders.filter(function(x){return x.cid===t.dataset.cid;})[0];if(ff){ff.fixed=+t.value||0;save();}return;}
