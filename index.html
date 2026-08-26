@@ -154,7 +154,7 @@
 (function(){
   "use strict";
   var KEY="nuvia_full_v1";
-  var WEDDING={name:"Luis Pablo & Daniela", date:"2027-07-03", meta:385000};
+  var WEDDING={name:"Luis Pablo & Daniela", date:"2027-07-03", meta:395000};
   var CATICON={venue:"🏛️",planning:"📋",musica:"🎵",foto:"📷",video:"🎬",deco:"🎨",licor:"🍷",pastel:"🎂",argollas:"💍"};
   var PLAN_LABELS={cuota_fija:"Cuota fija",suave_fuerte:"Suave → fuerte",fuerte_suave:"Fuerte → suave",anticipo_cuota:"Anticipo + cuota",personalizado:"Personalizado"};
 
@@ -187,6 +187,8 @@
       {id:uid(),name:"Daniela",ceiling:10000,plan:"cuota_fija",confidence:"firme",installments:[]},
       {id:uid(),name:"Danilo (suegro)",ceiling:0,plan:"personalizado",confidence:"incierto",installments:[]}
     ];
+    var guestMap={"Paola":80,"Julia":50,"Luis":50,"Luis Pablo":40,"Daniela":20,"Danilo (suegro)":10};
+    contributors.forEach(function(c){c.guests=guestMap[c.name]||0;});
     function cid(nm){var c=contributors.filter(function(x){return x.name===nm;})[0];return c?c.id:null;}
     function sp(){return {base:"porcentaje",funders:[]};}
     function ven(name,cur,amt,fav,note){return {id:uid(),name:name,currency:cur,amount:amt,fav:!!fav,note:note||"",proposal:null};}
@@ -229,6 +231,7 @@
     if(!r.vendors){r.vendors=[];if(r.vendor){var vid=uid();r.vendors.push({id:vid,name:r.vendor,currency:"GTQ",amount:r.comprometido||0,fav:false,note:"",proposal:r.proposal||null});r.selectedVendorId=vid;}else r.selectedVendorId=null;}
     if(r.selectedVendorId===undefined)r.selectedVendorId=null;
   });
+  state.contributors.forEach(function(c){if(c.guests===undefined)c.guests=0;});
   if(!selContrib && state.contributors[0]) selContrib=state.contributors[0].id;
 
   // precio de un proveedor SIEMPRE en quetzales (convierte USD con el tipo de cambio)
@@ -267,11 +270,12 @@
   function vInicio(){
     var bt=budgetTotals(), ft=fundingTotals();
     var cards=state.rubros.map(function(r){
+      var funderInits=(r.split&&r.split.funders?r.split.funders:[]).map(function(f){var c=contribById(f.cid);return c?'<span class="av" title="'+esc(c.name)+'">'+initials(c.name)+'</span>':"";}).join("");
       return '<div class="card" style="padding:14px;cursor:pointer" data-act="open-rubro" data-id="'+r.id+'">'+
         '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><span class="ic">'+(CATICON[r.cat]||"•")+'</span>'+
-        '<div style="flex:1"><div style="font-weight:600">'+esc(r.name)+'</div><div style="font-size:12px;color:var(--ink2)">'+esc(r.vendor||"Sin proveedor")+'</div></div>'+(r.proposal?'<span title="Propuesta adjunta">📎</span>':'')+'</div>'+
+        '<div style="flex:1"><div style="font-weight:600">'+esc(r.name)+'</div><div style="font-size:12px;color:var(--ink2)">'+esc(r.vendor||"Sin proveedor")+'</div></div></div>'+
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'+statusBadge(r.status)+'<span style="font-size:12px;color:var(--ink2)" class="num">'+fmtQ(r.techo)+'</span></div>'+
-        '<div style="display:flex;justify-content:space-between;align-items:center;"><div style="display:flex">'+(avatars(r.assignees)||'<span style="font-size:11px;color:var(--ink3)">sin responsable</span>')+'</div><span style="font-size:11px;color:var(--ink3)">'+esc(poolLabel(r.poolId))+'</span></div></div>';
+        '<div style="display:flex;justify-content:space-between;align-items:center;"><div style="display:flex">'+(funderInits||'<span style="font-size:11px;color:var(--ink3)">sin aportantes</span>')+'</div><span style="font-size:11px;color:var(--ink3)">'+esc(poolLabel(r.poolId))+'</span></div></div>';
     }).join("");
     return '<div class="card" style="background:var(--tint);border-color:#CDEBDF;display:flex;flex-wrap:wrap;gap:18px;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
       '<div><div style="font-size:12px;color:var(--teal)">Nuestra boda</div><h2 style="font-size:24px;color:var(--teal-ink)">Luis Pablo &amp; Daniela</h2><div style="font-size:14px;color:var(--teal);margin-top:4px">3 de julio de 2027 · Hacienda Nueva</div></div>'+
@@ -282,14 +286,13 @@
   function vRubros(){
     var rows=state.rubros.map(function(r){
       var disp=rubroDisp(r), over=r.comprometido>r.techo;
-      var chips=state.people.map(function(p){var on=r.assignees.indexOf(p.id)>-1;return '<span class="chip-p'+(on?" on":"")+'" data-act="assignee" data-id="'+r.id+'" data-person="'+p.id+'">'+esc(p.name)+'</span>';}).join("");
       var poolOpts=state.pools.map(function(p){return '<option value="'+p.id+'"'+(p.id===r.poolId?" selected":"")+'>'+esc(p.label)+'</option>';}).join("");
       return '<div class="rubro-row"><div class="rubro-head"><span class="ic">'+(CATICON[r.cat]||"•")+'</span><span class="nm">'+esc(r.name)+'</span>'+statusBadge(r.status)+'<span style="margin-left:auto;font-size:12px;color:var(--ink2)">Disponible: <strong class="num">'+fmtQ(disp)+'</strong></span></div>'+
         '<div class="bar" style="margin-bottom:10px"><span style="width:'+(r.pagado/Math.max(r.techo,1)*100)+'%;background:var(--paid)"></span><span style="width:'+(Math.max(0,r.comprometido-r.pagado)/Math.max(r.techo,1)*100)+'%;background:'+(over?"var(--over)":"var(--committed)")+'"></span></div>'+
         '<div class="ctrl-row"><div class="fld"><label>Bolsa que lo financia</label><select data-act="pool" data-id="'+r.id+'">'+poolOpts+'</select></div><div class="fld"><label>Techo (Q)</label><input type="number" step="500" data-act="techo" data-id="'+r.id+'" value="'+r.techo+'" style="width:120px"></div></div>'+
-        '<div style="font-size:11px;color:var(--ink2);margin-bottom:5px">Responsables (toca para asignar, estilo Monday)</div><div class="chips">'+chips+'</div>'+repartoHTML(r)+'</div>';
+        repartoHTML(r)+'</div>';
     }).join("");
-    return '<div class="sec-title"><h2>Rubros — asignación, reparto y responsables</h2><button class="btn btn-sm" data-act="add-rubro">+ Agregar rubro</button></div><p class="muted" style="font-size:13px;margin-bottom:14px">Cada rubro se financia desde una <strong>bolsa</strong> y su costo se reparte entre <strong>aportantes</strong> (por porcentaje, partes iguales, capacidad o montos fijos). Los <strong>responsables</strong> administran la tarea.</p>'+rows;
+    return '<div class="sec-title"><h2>Rubros — bolsa y reparto</h2><button class="btn btn-sm" data-act="add-rubro">+ Agregar rubro</button></div><p class="muted" style="font-size:13px;margin-bottom:14px">Cada rubro se financia desde una <strong>bolsa</strong> y su costo se reparte entre <strong>aportantes</strong> (por porcentaje, partes iguales, capacidad o montos fijos).</p>'+rows;
   }
   function repartoHTML(r){
     var T=r.techo||0, base=r.split.base, amap=assignedMap();
@@ -315,7 +318,7 @@
   function vAportes(){
     var ft=fundingTotals();
     var kpis=[["Prometido",fmtQ(ft.prometido),"aport. "+fmtQ(ft.pledges)+" · tés "+fmtQ(ft.teas)+" · reg. "+fmtQ(ft.gifts)],["Meta",fmtQ(WEDDING.meta),""],["Brecha",fmtQ(ft.brecha),"falta conseguir"],["En plan",fmtQ(ft.enPlan),fmtQ(ft.pagado)+" pagado"]].map(function(x){return '<div class="soft"><div class="kpi-label">'+x[0]+'</div><div class="kpi-val num">'+x[1]+'</div>'+(x[2]?'<div style="font-size:11px;color:var(--ink2)">'+x[2]+'</div>':'')+'</div>';}).join("");
-    var list=state.contributors.map(function(c){var planned=c.installments.reduce(function(s,i){return s+(i.amount||0);},0);return '<div class="contrib'+(c.id===selContrib?" sel":"")+'" data-act="sel-contrib" data-id="'+c.id+'"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">'+esc(c.name)+'</span>'+(c.confidence==="incierto"?'<span class="badge b-warn">por confirmar</span>':'<span class="badge b-neutral">'+PLAN_LABELS[c.plan]+'</span>')+'</div><div class="sub"><span>Techo: '+(c.ceiling?fmtQ(c.ceiling):"—")+'</span><span>En plan: '+fmtQ(planned)+'</span></div></div>';}).join("");
+    var list=state.contributors.map(function(c){var planned=c.installments.reduce(function(s,i){return s+(i.amount||0);},0);return '<div class="contrib'+(c.id===selContrib?" sel":"")+'" data-act="sel-contrib" data-id="'+c.id+'"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span style="font-weight:600;flex:1">'+esc(c.name)+'</span>'+(c.confidence==="incierto"?'<span class="badge b-warn">por confirmar</span>':'<span class="badge b-neutral">'+PLAN_LABELS[c.plan]+'</span>')+'<button class="row-del" data-act="del-contrib-card" data-id="'+c.id+'" title="Eliminar aportante">×</button></div><div class="sub"><span>Techo: '+(c.ceiling?fmtQ(c.ceiling):"—")+'</span><span>En plan: '+fmtQ(planned)+'</span></div></div>';}).join("");
     return '<div class="grid g4" style="margin-bottom:16px">'+kpis+'</div><div class="grid" style="grid-template-columns:320px 1fr;align-items:start"><div><div class="sec-title"><h2>Aportantes</h2><button class="btn btn-sm" data-act="add-contrib">+ Agregar</button></div>'+list+'</div><div class="card" id="planEditor">'+planEditorHTML()+'</div></div>'+otrosHTML()+'<div class="grid g2" style="margin-top:16px"><div class="card"><div class="sec-title"><h2>Calendario de aportes</h2></div><div id="calBox">'+calendarHTML()+'</div></div><div class="card"><div class="sec-title"><h2>Flujo mensual</h2></div><div class="flow" id="flowBox">'+flowHTML()+'</div></div></div>';
   }
   function otrosHTML(){
@@ -392,11 +395,34 @@
 
   function vDashboard(){
     var bt=budgetTotals(), ft=fundingTotals();
+    // selector de evento (hoy Boda; diseñado para múltiples eventos a futuro)
+    var eventBar='<div class="soft" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px"><span style="font-size:13px;color:var(--ink2)">Evento</span><select style="font-weight:600"><option>💍 Boda · Luis Pablo &amp; Daniela</option></select><span class="badge b-neutral">Próximamente: compras, inversiones y más eventos</span></div>';
     var kpis=[["Techo oficial",fmtQ(bt.techo)],["Comprometido",fmtQ(bt.comp)],["Disponible",fmtQ(bt.disp)],["Brecha de fondeo",fmtQ(ft.brecha)]].map(function(x,idx){return '<div class="soft"><div class="kpi-label">'+x[0]+'</div><div class="kpi-val num"'+(idx===3&&ft.brecha>0?' style="color:var(--warn-ink)"':'')+'>'+x[1]+'</div></div>';}).join("");
+
+    // ---- OVERLOOK: invitados, meta, total de la boda, costo por invitado, costo justo ----
+    var totalBoda=bt.techo;                 // suma de rubros (crece al elegir proveedores)
+    var meta=WEDDING.meta;                  // meta de fondeo
+    var totalGuests=state.contributors.reduce(function(s,c){return s+(+c.guests||0);},0);
+    var perGuest=totalGuests>0?meta/totalGuests:0;   // por ahora, sobre la META de fondeo
+    var ovKpis=[["Meta de fondeo",fmtQ(meta),"objetivo de recaudación"],["Total de la boda",fmtQ(totalBoda),"suma de rubros · en progreso"],["Invitados",totalGuests.toLocaleString("en-US"),"suma por aportante"],["Costo por invitado",fmtQ(perGuest),"sobre la meta de fondeo"]].map(function(x){return '<div class="soft"><div class="kpi-label">'+x[0]+'</div><div class="kpi-val num">'+x[1]+'</div><div style="font-size:11px;color:var(--ink3)">'+x[2]+'</div></div>';}).join("");
+    var ovRows=state.contributors.map(function(c){
+      var g=+c.guests||0, justo=Math.round(g*perGuest), prom=c.ceiling||0, diff=prom-justo;
+      var diffTxt=prom===0?'<span class="muted">—</span>':diff>=0?'<span style="color:var(--success-ink)">cubre +'+fmtQ(diff)+'</span>':'<span style="color:var(--over)">falta '+fmtQ(-diff)+'</span>';
+      return '<tr><td style="font-weight:600">'+esc(c.name)+'</td>'+
+        '<td style="text-align:center"><input type="number" min="0" data-act="guests" data-id="'+c.id+'" value="'+g+'" style="width:70px;text-align:center"></td>'+
+        '<td style="text-align:right" class="num">'+fmtQ(justo)+'</td>'+
+        '<td style="text-align:right" class="num">'+(prom?fmtQ(prom):"—")+'</td>'+
+        '<td style="text-align:right;font-size:13px">'+diffTxt+'</td></tr>';
+    }).join("");
+    var overlook='<div class="card" style="margin-bottom:16px"><div class="sec-title"><h2>Overlook de la boda</h2><span class="muted" style="font-size:12px">Costo por invitado y aporte "justo" por persona</span></div>'+
+      '<div class="grid g4" style="margin-bottom:14px">'+ovKpis+'</div>'+
+      '<table><thead><tr><th>Aportante</th><th style="text-align:center">Invitados</th><th style="text-align:right">Costo justo</th><th style="text-align:right">Prometió</th><th style="text-align:right">Balance</th></tr></thead><tbody>'+ovRows+'</tbody></table>'+
+      '<p class="muted" style="font-size:12px;margin-top:10px">El <strong>costo por invitado</strong> se calcula hoy sobre la <strong>meta de fondeo</strong> (Q'+meta.toLocaleString("en-US")+'); cuando todos los proveedores estén elegidos, el <strong>total de la boda</strong> será la suma real de los rubros. El <strong>costo justo</strong> = invitados × costo por invitado; el <strong>balance</strong> lo compara con lo prometido.</p></div>';
+
     var bars=state.rubros.map(function(r){var over=r.comprometido>r.techo, ev=r.status==="evaluacion";var seg=ev?'<span style="width:78%;background:var(--estimate)"></span>':'<span style="width:'+(r.pagado/Math.max(r.techo,1)*100)+'%;background:var(--paid)"></span><span style="width:'+(Math.max(0,r.comprometido-r.pagado)/Math.max(r.techo,1)*100)+'%;background:'+(over?"var(--over)":"var(--committed)")+'"></span>';return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><span style="width:130px;font-size:13px">'+esc(r.name)+'</span><div class="bar" style="flex:1">'+seg+'</div><span style="width:66px;text-align:right;font-size:12px;color:'+(over?"var(--over)":"var(--ink2)")+'" class="num">'+(ev?"en eval.":fmtQ(r.techo))+'</span></div>';}).join("");
     var decisions=[];state.rubros.forEach(function(r){if(r.status==="evaluacion")decisions.push(["📷","Elegir proveedor de "+r.name,"Decisión","b-teal"]);if(r.comprometido>r.techo)decisions.push(["▲",r.name+" excede el techo","Sobrecosto","b-danger"]);});if(ft.brecha>0)decisions.push(["🚩","Cerrar brecha de fondeo de "+fmtQ(ft.brecha),"Fondeo","b-warn"]);
     var decHTML=decisions.map(function(d){return '<div class="cal-item"><span style="width:20px">'+d[0]+'</span><span style="flex:1">'+esc(d[1])+'</span><span class="badge '+d[3]+'">'+d[2]+'</span></div>';}).join("")||'<p class="muted">Sin decisiones pendientes.</p>';
-    return '<div class="grid g4" style="margin-bottom:16px">'+kpis+'</div><div class="card" style="margin-bottom:16px"><div class="sec-title"><h2>Presupuesto por rubro</h2><span class="muted" style="font-size:12px">Pagado · Comprometido · Disponible</span></div>'+bars+'<div class="legend"><span><span class="dot" style="background:var(--paid)"></span>Pagado</span><span><span class="dot" style="background:var(--committed)"></span>Comprometido</span><span><span class="dot" style="background:var(--estimate)"></span>En evaluación</span></div></div><div class="card"><div class="sec-title"><h2>Decisiones pendientes</h2></div>'+decHTML+'</div>';
+    return eventBar+'<div class="grid g4" style="margin-bottom:16px">'+kpis+'</div>'+overlook+'<div class="card" style="margin-bottom:16px"><div class="sec-title"><h2>Presupuesto por rubro</h2><span class="muted" style="font-size:12px">Pagado · Comprometido · Disponible</span></div>'+bars+'<div class="legend"><span><span class="dot" style="background:var(--paid)"></span>Pagado</span><span><span class="dot" style="background:var(--committed)"></span>Comprometido</span><span><span class="dot" style="background:var(--estimate)"></span>En evaluación</span></div></div><div class="card"><div class="sec-title"><h2>Decisiones pendientes</h2></div>'+decHTML+'</div>';
   }
 
   function vCopiloto(){return '<div class="soft" style="margin-bottom:18px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="color:var(--teal);font-size:18px">✦</span><span style="font-weight:600;font-size:16px">Pregúntale a la Nuvia</span><span class="badge b-neutral">Solo lectura · demo</span></div><div class="muted" style="font-size:12px;margin-bottom:12px">Novia + IA · la inteligencia que conoce tu boda al derecho y al revés.</div><div class="chips"><span class="chip" data-act="cop" data-q="mas20">¿Qué pasa si agrego 20 invitados?</span><span class="chip" data-act="cop" data-q="papa">¿Y si mi papá solo aporta Q3,000 este mes?</span><span class="chip" data-act="cop" data-q="dvj">Daniel vs Juanfer en foto</span></div></div><div id="copAns">'+copAnswer("mas20")+'</div>';}
@@ -461,6 +487,7 @@
     if(a==="sel-contrib"){selContrib=t.dataset.id;render();return;}
     if(a==="add-contrib"){var c={id:uid(),name:"Nuevo aportante",ceiling:0,plan:"personalizado",confidence:"firme",installments:[]};state.contributors.push(c);selContrib=c.id;render();return;}
     if(a==="del-contrib"){var cc=contrib();if(cc&&confirm("¿Eliminar a "+cc.name+"?")){state.contributors=state.contributors.filter(function(x){return x.id!==selContrib;});selContrib=state.contributors[0]?state.contributors[0].id:null;render();}return;}
+    if(a==="del-contrib-card"){var cid5=t.dataset.id;var c5=state.contributors.filter(function(x){return x.id===cid5;})[0];if(c5&&confirm("¿Eliminar a "+c5.name+"? También se quitará de los repartos.")){state.contributors=state.contributors.filter(function(x){return x.id!==cid5;});state.rubros.forEach(function(r){if(r.split&&r.split.funders)r.split.funders=r.split.funders.filter(function(f){return f.cid!==cid5;});});if(selContrib===cid5)selContrib=state.contributors[0]?state.contributors[0].id:null;render();}return;}
     if(a==="add-ins"){var c2=contrib();if(c2){var last=c2.installments[c2.installments.length-1];c2.installments.push({id:uid(),date:last&&last.date?addMonths(last.date,1):"2026-09-05",amount:0,paid:false,boleta:null});render();}return;}
     if(a==="ins-del"){var c3=contrib();if(c3){c3.installments=c3.installments.filter(function(x){return x.id!==t.dataset.iid;});render();}return;}
     if(a==="gen-plan"){var c4=contrib();if(c4){var total=+document.getElementById("gTotal").value||0,n=+document.getElementById("gN").value||0,st=document.getElementById("gStart").value,sh=document.getElementById("gShape").value;var pl=generate(total,n,st,sh);if(pl.length){c4.installments=pl;c4.plan=sh;render();}}return;}
@@ -486,6 +513,7 @@
     if(a==="fx"){state.fx=+t.value||7.95;save();return;}
     if(a==="v-name"||a==="v-amt"||a==="v-note"){var rr=rubro(t.dataset.rid);var v=rr?vendorById(rr,t.dataset.vid):null;if(v){if(a==="v-name")v.name=t.value;else if(a==="v-amt")v.amount=+t.value||0;else v.note=t.value;save();}return;}
     if(a==="techo"){var r=rubro(t.dataset.id);if(r){r.techo=+t.value||0;save();}return;}
+    if(a==="guests"){var cg=state.contributors.filter(function(x){return x.id===t.dataset.id;})[0];if(cg){cg.guests=+t.value||0;save();}return;}
     if(a==="funder-pct"){var rp=rubro(t.dataset.id);var f=rp.split.funders.filter(function(x){return x.cid===t.dataset.cid;})[0];if(f){f.pct=+t.value||0;save();}return;}
     if(a==="funder-fixed"){var rx=rubro(t.dataset.id);var ff=rx.split.funders.filter(function(x){return x.cid===t.dataset.cid;})[0];if(ff){ff.fixed=+t.value||0;save();}return;}
     if(a==="tea-name"||a==="tea-date"||a==="tea-amt"){var tt=state.teas.filter(function(x){return x.id===t.dataset.id;})[0];if(tt){if(a==="tea-name")tt.name=t.value;else if(a==="tea-date")tt.date=t.value;else tt.amount=+t.value||0;save();}return;}
@@ -498,7 +526,7 @@
     if(a==="pool"){var r=rubro(t.dataset.id);if(r){r.poolId=t.value;save();}return;}
     if(a==="ins-paid"){var c=contrib();if(c){var tr=t.closest("tr");var ins=c.installments.filter(function(x){return x.id===tr.dataset.iid;})[0];if(ins){ins.paid=t.checked;render();}}return;}
     if(a==="split-base"){var rb=rubro(t.dataset.id);if(rb){rb.split.base=t.value;render();}return;}
-    if(a==="funder-pct"||a==="funder-fixed"||a==="techo"||a==="c-ceil"||a==="tea-name"||a==="tea-date"||a==="tea-amt"||a==="gift-from"||a==="gift-date"||a==="gift-amt"){render();return;}
+    if(a==="funder-pct"||a==="funder-fixed"||a==="techo"||a==="c-ceil"||a==="guests"||a==="tea-name"||a==="tea-date"||a==="tea-amt"||a==="gift-from"||a==="gift-date"||a==="gift-amt"){render();return;}
   });
   function rubro(id){return state.rubros.filter(function(x){return x.id===id;})[0];}
   function contrib(){return state.contributors.filter(function(x){return x.id===selContrib;})[0];}
