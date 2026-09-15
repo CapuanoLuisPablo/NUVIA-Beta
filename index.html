@@ -183,7 +183,7 @@
 
   // ---------- archivos ----------
   function pickFile(accept,cb){var inp=document.createElement("input");inp.type="file";inp.accept=accept;inp.style.display="none";document.body.appendChild(inp);inp.addEventListener("change",function(){if(inp.files&&inp.files[0])cb(inp.files[0]);document.body.removeChild(inp);});inp.click();}
-  function makeThumbnail(file,maxDim,cb){var fr=new FileReader();fr.onload=function(){var img=new Image();img.onload=function(){var s=Math.min(1,maxDim/Math.max(img.width,img.height));var cw=Math.round(img.width*s),ch=Math.round(img.height*s);var c=document.createElement("canvas");c.width=cw;c.height=ch;c.getContext("2d").drawImage(img,0,0,cw,ch);cb(c.toDataURL("image/jpeg",0.7));};img.src=fr.result;};fr.readAsDataURL(file);}
+  function makeThumbnail(file,maxDim,cb){var fr=new FileReader();fr.onload=function(){var img=new Image();img.onload=function(){var cap=Math.min(maxDim||500,500);var s=Math.min(1,cap/Math.max(img.width,img.height));var cw=Math.round(img.width*s),ch=Math.round(img.height*s);var c=document.createElement("canvas");c.width=cw;c.height=ch;c.getContext("2d").drawImage(img,0,0,cw,ch);cb(c.toDataURL("image/jpeg",0.5));};img.src=fr.result;};fr.readAsDataURL(file);}
   function readDataURL(file,cb){var fr=new FileReader();fr.onload=function(){cb(fr.result);};fr.readAsDataURL(file);}
   function readText(file,cb){var fr=new FileReader();fr.onload=function(){cb(fr.result);};fr.readAsText(file);}
   function openDataUrl(url){try{fetch(url).then(function(r){return r.blob();}).then(function(b){window.open(URL.createObjectURL(b),"_blank");});}catch(e){window.open(url,"_blank");}}
@@ -205,10 +205,10 @@
     contributors.forEach(function(c){c.guests=guestMap[c.name]||0;});
     function cid(nm){var c=contributors.filter(function(x){return x.name===nm;})[0];return c?c.id:null;}
     function sp(){return {base:"porcentaje",funders:[]};}
-    function ven(name,cur,amt,fav,note){return {id:uid(),name:name,currency:cur,amount:amt,fav:!!fav,note:note||"",proposal:null};}
+    function ven(name,cur,amt,fav,note){return {id:uid(),name:name,currency:cur,amount:amt,fav:!!fav,note:note||"",proposal:null,selected:false};}
     function rub(name,cat,pool,techo,pagado,ass,vendors,selName){
       var r={id:uid(),name:name,cat:cat,poolId:pool,techo:techo,pagado:pagado,assignees:ass,split:sp(),vendors:vendors||[],selectedVendorId:null,status:"por_definir",vendor:null,comprometido:0};
-      if(selName){var v=r.vendors.filter(function(x){return x.name===selName;})[0];if(v){r.selectedVendorId=v.id;r.vendor=v.name;r.status="contratado";}}
+      if(selName){var v=r.vendors.filter(function(x){return x.name===selName;})[0];if(v){v.selected=true;r.selectedVendorId=v.id;r.vendor=v.name;r.status="contratado";}}
       else if(r.vendors.length){r.status="evaluacion";}
       return r;
     }
@@ -225,9 +225,9 @@
     ];
     // reparto de ejemplo en Venue
     rubros[0].split={base:"porcentaje",funders:[{cid:cid("Paola"),pct:65,fixed:0},{cid:cid("Julia"),pct:30,fixed:0},{cid:cid("Daniela"),pct:5,fixed:0}]};
-    // fijar comprometido de los contratados (precio en Q del vendor seleccionado)
-    rubros.forEach(function(r){if(r.selectedVendorId){var v=r.vendors.filter(function(x){return x.id===r.selectedVendorId;})[0];if(v)r.comprometido=(v.currency==="USD")?Math.round(v.amount*7.95):v.amount;}});
-    rubros[0].comprometido=129000; rubros[0].pagado=5000; rubros[1].pagado=16000;
+    // fijar comprometido de los contratados = suma de proveedores seleccionados
+    rubros.forEach(function(r){recomputeRubro(r);});
+    rubros[1].pagado=16000;
     var aportes=[{id:uid(),name:"Despedida de solteros",date:"2027-05-15",amount:8000,poolId:"boda"},{id:uid(),name:"Regalos de la recepción",date:"2027-07-10",amount:5000,poolId:"boda"}];
     return {fx:7.95,people:people,pools:pools,rubros:rubros,contributors:contributors,aportes:aportes};
   }
@@ -244,8 +244,12 @@
   if(!state.fx)state.fx=7.95;
   state.rubros.forEach(function(r){
     if(!r.split)r.split={base:"porcentaje",funders:[]};
-    if(!r.vendors){r.vendors=[];if(r.vendor){var vid=uid();r.vendors.push({id:vid,name:r.vendor,currency:"GTQ",amount:r.comprometido||0,fav:false,note:"",proposal:r.proposal||null});r.selectedVendorId=vid;}else r.selectedVendorId=null;}
-    if(r.selectedVendorId===undefined)r.selectedVendorId=null;
+    if(!r.vendors){r.vendors=[];if(r.vendor){var vid=uid();r.vendors.push({id:vid,name:r.vendor,currency:"GTQ",amount:r.comprometido||0,fav:false,note:"",proposal:r.proposal||null,selected:true});}}
+    // migrar de selectedVendorId (singular) a selected (por propuesta, permite varios)
+    var anySelected=r.vendors.some(function(v){return v.selected;});
+    r.vendors.forEach(function(v){if(v.selected===undefined)v.selected=false;});
+    if(!anySelected && r.selectedVendorId){var sv=r.vendors.filter(function(v){return v.id===r.selectedVendorId;})[0];if(sv)sv.selected=true;}
+    recomputeRubro(r);
   });
   state.contributors.forEach(function(c){if(c.guests===undefined)c.guests=0;c.installments.forEach(function(i){if(i.planned===undefined)i.planned=i.amount||0;if(i.paidAmount===undefined)i.paidAmount=i.paid?(i.amount||0):0;if(i.paid===undefined)i.paid=i.paidAmount>0;if(i.account===undefined)i.account=null;});});
   (function(){var am=assignedMap();state.contributors.forEach(function(c){if(c.planBase===undefined)c.planBase=am[c.id]||0;});})();
@@ -254,6 +258,8 @@
   // precio de un proveedor SIEMPRE en quetzales (convierte USD con el tipo de cambio)
   function vendorQ(v){return v?(v.currency==="USD"?Math.round((v.amount||0)*(state.fx||7.95)):(v.amount||0)):0;}
   function vendorById(r,vid){return (r.vendors||[]).filter(function(x){return x.id===vid;})[0];}
+  function selectedVendors(r){return (r.vendors||[]).filter(function(v){return v.selected;});}
+  function recomputeRubro(r){var sel=selectedVendors(r);r.comprometido=sel.reduce(function(s,v){return s+vendorQ(v);},0);r.vendor=sel.length?sel.map(function(v){return v.name;}).join(" + "):null;r.status=sel.length?"contratado":((r.vendors&&r.vendors.length)?"evaluacion":"por_definir");}
 
   // ---------- cálculos ----------
   function personName(id){var p=state.people.filter(function(x){return x.id===id;})[0];return p?p.name:id;}
@@ -485,35 +491,40 @@
     var sections=state.rubros.map(function(r){
       var vs=r.vendors||[];
       var vendorRows=vs.map(function(v){
-        var isSel=r.selectedVendorId===v.id, q=vendorQ(v);
+        var isSel=!!v.selected, q=vendorQ(v);
         var priceNote=v.currency==="USD"?'<span class="muted" style="font-size:11px"> (US$'+(v.amount||0).toLocaleString("en-US")+' @ '+(state.fx||7.95)+')</span>':'';
-        var prop=v.proposal?'<span class="linklike" data-act="view-vprop" data-rid="'+r.id+'" data-vid="'+v.id+'" title="Ver propuesta">📄</span>':'';
-        return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);flex-wrap:wrap">'+
+        var prop=v.proposal?(v.proposal.url?'<span class="linklike" data-act="view-vprop" data-rid="'+r.id+'" data-vid="'+v.id+'" title="Ver propuesta">📄</span>':'<span title="Propuesta registrada (referencia)">📄</span>'):'';
+        return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);flex-wrap:wrap'+(isSel?';background:var(--tint2)':'')+'">'+
           '<span data-act="fav-vendor" data-rid="'+r.id+'" data-vid="'+v.id+'" style="cursor:pointer;font-size:15px" title="Favorito">'+(v.fav?"★":"☆")+'</span>'+
           '<span style="flex:1;min-width:120px"><span style="font-weight:600;font-size:14px">'+esc(v.name)+'</span> '+prop+(v.note?'<div style="font-size:11px;color:var(--ink3)">'+esc(v.note)+'</div>':'')+'</span>'+
           '<span style="font-weight:600;text-align:right;min-width:90px" class="num">'+fmtQ(q)+priceNote+'</span>'+
-          (isSel?'<span class="badge b-success">Oficial</span>':'<button class="btn btn-sm" data-act="select-vendor" data-rid="'+r.id+'" data-vid="'+v.id+'">Elegir</button>')+
+          '<button class="btn btn-sm'+(isSel?" btn-primary":"")+'" data-act="toggle-vendor" data-rid="'+r.id+'" data-vid="'+v.id+'">'+(isSel?"✓ Incluido":"Incluir")+'</button>'+
           '<button class="btn btn-sm" data-act="ver-expediente" data-vid="'+v.id+'">Expediente</button>'+
           '<button class="row-del" data-act="del-vendor" data-rid="'+r.id+'" data-vid="'+v.id+'" title="Eliminar">×</button>'+
         '</div>';
       }).join("");
+      var sel=selectedVendors(r);
       var cmpNote=vs.length>=2?'<span class="badge b-teal" style="margin-left:6px">Comparando '+vs.length+'</span>':'';
-      return '<div class="card" style="margin-bottom:12px"><div class="sec-title" style="margin-bottom:8px"><div style="display:flex;align-items:center;gap:10px"><span class="ic">'+rubroIcon(r)+'</span><div><div style="font-weight:600">'+esc(r.name)+'</div><div style="font-size:12px;color:var(--ink2)">Techo '+fmtQ(r.techo)+' · '+(r.status==="contratado"?("Oficial: "+esc(r.vendor)):(vs.length?"En evaluación":"Sin proveedores"))+cmpNote+'</div></div></div><button class="btn btn-sm" data-act="add-vendor" data-rid="'+r.id+'">+ Agregar proveedor</button></div>'+
-        (vendorRows||'<span class="muted" style="font-size:13px">Aún no agregas proveedores a este rubro. Usa "+ Agregar proveedor".</span>')+'</div>';
+      var headInfo=sel.length?("Incluidos: "+esc(r.vendor)+" · "+fmtQ(r.comprometido)):(vs.length?"En evaluación":"Sin proveedores");
+      var totalRow=sel.length>=2?'<div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--line);margin-top:6px;padding-top:8px;font-size:13px"><span style="font-weight:600">Total del rubro ('+sel.length+' proveedores)</span><span class="num" style="font-weight:700">'+fmtQ(r.comprometido)+'</span></div>':'';
+      return '<div class="card" style="margin-bottom:12px"><div class="sec-title" style="margin-bottom:8px"><div style="display:flex;align-items:center;gap:10px"><span class="ic">'+rubroIcon(r)+'</span><div><div style="font-weight:600">'+esc(r.name)+'</div><div style="font-size:12px;color:var(--ink2)">Techo '+fmtQ(r.techo)+' · '+headInfo+cmpNote+'</div></div></div><button class="btn btn-sm" data-act="add-vendor" data-rid="'+r.id+'">+ Agregar proveedor</button></div>'+
+        (vendorRows||'<span class="muted" style="font-size:13px">Aún no agregas proveedores a este rubro. Usa "+ Agregar proveedor".</span>')+totalRow+'</div>';
     }).join("");
-    return '<div class="sec-title" style="margin-top:6px"><h2>Proveedores</h2><span class="muted" style="font-size:13px">Agrega proveedores a cualquier rubro, sube su propuesta y elige el oficial</span></div>'+fxbar+sections;
+    var storedPdfs=0;state.rubros.forEach(function(r){(r.vendors||[]).forEach(function(v){if(v.proposal&&v.proposal.url)storedPdfs++;});});
+    var freeBtn=storedPdfs>0?'<button class="btn btn-sm" data-act="free-space" style="margin-left:8px">🧹 Liberar espacio ('+storedPdfs+' PDF)</button>':'';
+    return '<div class="sec-title" style="margin-top:6px"><h2>Proveedores</h2><span class="muted" style="font-size:13px">Agrega proveedores a un rubro y marca uno o varios como incluidos (el rubro suma todos los incluidos)</span>'+freeBtn+'</div>'+fxbar+sections;
   }
   function vendorExpedienteHTML(rid,vid){
     var r=rubro(rid); var v=r?vendorById(r,vid):null; if(!v)return "";
-    var q=vendorQ(v), isSel=r.selectedVendorId===v.id;
-    var prop=v.proposal?'<span class="filechip">📄 '+esc(v.proposal.name)+' <span class="linklike" data-act="view-vprop" data-rid="'+rid+'" data-vid="'+vid+'">ver</span> <span class="linklike" data-act="remove-vprop" data-rid="'+rid+'" data-vid="'+vid+'" style="color:var(--ink3)">quitar</span></span>':'<button class="btn btn-sm" data-act="upload-vprop" data-rid="'+rid+'" data-vid="'+vid+'">📎 Subir propuesta (PDF)</button>';
-    return '<div class="sec-title"><h2 style="font-size:18px">Expediente · '+esc(v.name)+'</h2>'+(isSel?'<span class="badge b-success">Oficial</span>':(v.fav?'<span class="badge b-teal">Favorito</span>':'<span class="badge b-warn">En evaluación</span>'))+'</div>'+
+    var q=vendorQ(v), isSel=!!v.selected;
+    var prop=v.proposal?(v.proposal.url?'<span class="filechip">📄 '+esc(v.proposal.name)+' <span class="linklike" data-act="view-vprop" data-rid="'+rid+'" data-vid="'+vid+'">ver</span> <span class="linklike" data-act="remove-vprop" data-rid="'+rid+'" data-vid="'+vid+'" style="color:var(--ink3)">quitar</span></span>':'<span class="filechip">📄 '+esc(v.proposal.name)+' <span class="muted" style="font-size:11px">(referencia · el archivo no se guarda en el prototipo)</span> <span class="linklike" data-act="remove-vprop" data-rid="'+rid+'" data-vid="'+vid+'" style="color:var(--ink3)">quitar</span></span>'):'<button class="btn btn-sm" data-act="upload-vprop" data-rid="'+rid+'" data-vid="'+vid+'">📎 Registrar propuesta (PDF)</button>';
+    return '<div class="sec-title"><h2 style="font-size:18px">Expediente · '+esc(v.name)+'</h2>'+(isSel?'<span class="badge b-success">Incluido en el rubro</span>':(v.fav?'<span class="badge b-teal">Favorito</span>':'<span class="badge b-warn">En evaluación</span>'))+'</div>'+
       '<div class="ctrl-row"><div class="fld"><label>Proveedor</label><input data-act="v-name" data-rid="'+rid+'" data-vid="'+vid+'" value="'+esc(v.name)+'" style="width:190px"></div>'+
       '<div class="fld"><label>Moneda</label><select data-act="v-cur" data-rid="'+rid+'" data-vid="'+vid+'"><option value="GTQ"'+(v.currency==="GTQ"?" selected":"")+'>Quetzales</option><option value="USD"'+(v.currency==="USD"?" selected":"")+'>Dólares</option></select></div>'+
       '<div class="fld"><label>Precio ('+(v.currency==="USD"?"US$":"Q")+')</label><input type="number" step="50" data-act="v-amt" data-rid="'+rid+'" data-vid="'+vid+'" value="'+(v.amount||0)+'" style="width:120px"></div></div>'+
       '<div class="fld" style="margin-bottom:12px"><label>Nota (horas, equipo, IVA…)</label><input data-act="v-note" data-rid="'+rid+'" data-vid="'+vid+'" value="'+esc(v.note||"")+'" style="width:100%"></div>'+
       '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:var(--raise);border:1px solid var(--line);border-radius:10px;padding:12px"><div><div class="kpi-label">Precio en quetzales</div><div class="kpi-val num">'+fmtQ(q)+'</div>'+(v.currency==="USD"?'<div style="font-size:11px;color:var(--ink3)">US$'+(v.amount||0).toLocaleString("en-US")+' × '+(state.fx||7.95)+'</div>':'')+'</div><div>'+prop+'</div></div>'+
-      '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn" data-act="modal-close">Cerrar</button>'+(isSel?'':'<button class="btn btn-primary" data-act="select-vendor" data-rid="'+rid+'" data-vid="'+vid+'">Seleccionar como oficial</button>')+'</div>';
+      '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn" data-act="modal-close">Cerrar</button><button class="btn '+(isSel?"":"btn-primary")+'" data-act="toggle-vendor" data-rid="'+rid+'" data-vid="'+vid+'">'+(isSel?"Quitar del rubro":"Incluir en el rubro")+'</button></div>';
   }
   function addVendorHTML(rid){
     return '<h3 style="font-size:18px;margin-bottom:12px">Nuevo proveedor</h3>'+
@@ -609,7 +620,7 @@
   function attachBoleta(iid){pickFile("image/*",function(file){makeThumbnail(file,600,function(thumb){var c=contrib();if(!c)return;var ins=c.installments.filter(function(x){return x.id===iid;})[0];if(!ins)return;pending={iid:iid,thumb:thumb,name:file.name};var det=sharesByContributor(c.id);var acctOpts='<option value="">— elige la cuenta —</option>'+det.map(function(d){return '<option value="'+d.rubroId+'"'+(ins.account===d.rubroId?" selected":"")+'>'+esc(d.name)+(d.vendor?" · "+esc(d.vendor):"")+'</option>';}).join("");openModal('<h3 style="font-size:18px;margin-bottom:6px">Confirmar abono</h3><p class="muted" style="font-size:13px;margin-bottom:12px">Boleta: '+esc(file.name)+'. Elige a qué cuenta va, revisa el monto y confirma.</p><img src="'+thumb+'" style="max-width:100%;max-height:180px;border-radius:8px;border:1px solid var(--line);margin-bottom:12px"><div class="fld" style="margin-bottom:10px"><label>Cuenta (proveedor)</label><select id="bAccount" style="width:100%">'+acctOpts+'</select></div><div class="fld" style="margin-bottom:6px"><label>Monto del abono (Q)</label><input type="number" id="bMonto" value="'+(+ins.paidAmount>0?ins.paidAmount:(+ins.planned||0))+'" style="width:160px"></div><div style="font-size:11px;color:var(--ink3);margin-bottom:14px">En la app real, la IA leería el monto de la boleta y tú solo confirmarías.</div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-act="modal-close">Cancelar</button><button class="btn btn-primary" data-act="confirm-boleta">Confirmar abono</button></div>');});});}
   function confirmBoleta(){if(!pending)return;var c=contrib();if(!c){closeModal();return;}var ins=c.installments.filter(function(x){return x.id===pending.iid;})[0];if(ins){var m=parseFloat(document.getElementById("bMonto").value);if(!isNaN(m))ins.paidAmount=m;var acc=document.getElementById("bAccount");if(acc)ins.account=acc.value||ins.account||null;ins.paid=true;ins.boleta={thumb:pending.thumb,name:pending.name};}closeModal();render();}
   function attachProposal(rid){pickFile("application/pdf",function(file){readDataURL(file,function(url){var r=rubro(rid);if(r){r.proposal={name:file.name,size:file.size,url:url,at:new Date().toISOString().slice(0,10)};render();if(storageFull)alert("La propuesta se adjuntó, pero es muy grande para el guardado automático del navegador. Usa 'Exportar datos' para respaldarla.");}});});}
-  function uploadVendorProposal(rid,vid){pickFile("application/pdf",function(file){readDataURL(file,function(url){var r=rubro(rid);var v=r?vendorById(r,vid):null;if(v){v.proposal={name:file.name,size:file.size,url:url,at:new Date().toISOString().slice(0,10)};render();openModal(vendorExpedienteHTML(rid,vid));if(storageFull)alert("La propuesta se adjuntó, pero es muy grande para el guardado automático del navegador. Usa 'Exportar datos' para respaldarla.");}});});}
+  function uploadVendorProposal(rid,vid){pickFile("application/pdf",function(file){var r=rubro(rid);var v=r?vendorById(r,vid):null;if(v){v.proposal={name:file.name,size:file.size,url:null,stored:false,at:new Date().toISOString().slice(0,10)};render();openModal(vendorExpedienteHTML(rid,vid));}});}
 
   function exportData(){try{var blob=new Blob([JSON.stringify(state)],{type:"application/json"});var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="nuvia-datos-"+new Date().toISOString().slice(0,10)+".json";document.body.appendChild(a);a.click();document.body.removeChild(a);}catch(e){alert("No se pudo exportar.");}}
   function importData(){pickFile("application/json,.json",function(file){readText(file,function(txt){try{var s=JSON.parse(txt);if(!s.rubros||!s.contributors)throw 0;if(confirm("¿Reemplazar los datos actuales por los del archivo? (Considera exportar antes.)")){state=s;selContrib=state.contributors[0]?state.contributors[0].id:null;render();}}catch(e){alert("Ese archivo no es un respaldo válido de Nuvia.");}});});}
@@ -654,7 +665,7 @@
     if(a==="regen-plan"){var cr=contrib();if(cr){var asg=assignedMap()[cr.id]||0;var n=cr.installments.length||6;var st=(cr.installments[0]&&cr.installments[0].date)||"2026-09-05";var sh=cr.plan||"cuota_fija";var pl=generate(asg,n,st,sh);cr.installments=pl;cr.planBase=asg;render();}return;}
     if(a==="keep-plan"){var ck=contrib();if(ck){ck.planBase=assignedMap()[ck.id]||0;save();render();}return;}
     if(a==="boleta"){attachBoleta(t.dataset.iid);return;}
-    if(a==="view-boleta"){var c5=contrib();var ins=c5.installments.filter(function(x){return x.id===t.dataset.iid;})[0];if(ins&&ins.boleta)openModal('<h3 style="font-size:17px;margin-bottom:10px">Boleta · '+esc(ins.boleta.name)+'</h3><img src="'+ins.boleta.thumb+'" style="max-width:100%;border-radius:8px;border:1px solid var(--line)"><div style="text-align:right;margin-top:12px"><button class="btn" data-act="modal-close">Cerrar</button></div>');return;}
+    if(a==="view-boleta"){var c5=contrib();var ins=c5.installments.filter(function(x){return x.id===t.dataset.iid;})[0];if(ins&&ins.boleta)openModal('<h3 style="font-size:17px;margin-bottom:10px">Boleta · '+esc(ins.boleta.name)+'</h3><img src="'+ins.boleta.thumb+'" style="max-width:100%;border-radius:8px;border:1px solid var(--line)"><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><a class="btn" href="'+ins.boleta.thumb+'" download="'+esc(ins.boleta.name||"boleta.jpg")+'">⤓ Descargar</a><button class="btn" data-act="modal-close">Cerrar</button></div>');return;}
     if(a==="confirm-boleta"){confirmBoleta();return;}
     if(a==="modal-close"){closeModal();return;}
     if(a==="proposal"){attachProposal(t.dataset.id);return;}
@@ -662,10 +673,11 @@
     if(a==="remove-proposal"){var rr2=rubro(t.dataset.id);if(rr2){rr2.proposal=null;render();}return;}
     if(a==="add-vendor"){openModal(addVendorHTML(t.dataset.rid));return;}
     if(a==="save-vendor"){var rr0=rubro(t.dataset.rid);if(rr0){var nm=document.getElementById("nvName").value.trim()||"Proveedor";var cur=document.getElementById("nvCur").value;var amt=+document.getElementById("nvAmt").value||0;var note=document.getElementById("nvNote").value.trim();rr0.vendors.push({id:uid(),name:nm,currency:cur,amount:amt,fav:false,note:note,proposal:null});if(rr0.status==="por_definir")rr0.status="evaluacion";closeModal();render();}return;}
-    if(a==="del-vendor"){var rr1=rubro(t.dataset.rid);if(rr1&&confirm("¿Eliminar este proveedor?")){rr1.vendors=rr1.vendors.filter(function(x){return x.id!==t.dataset.vid;});if(rr1.selectedVendorId===t.dataset.vid){rr1.selectedVendorId=null;rr1.vendor=null;rr1.comprometido=0;rr1.status=rr1.vendors.length?"evaluacion":"por_definir";}render();}return;}
+    if(a==="del-vendor"){var rr1=rubro(t.dataset.rid);if(rr1&&confirm("¿Eliminar este proveedor?")){rr1.vendors=rr1.vendors.filter(function(x){return x.id!==t.dataset.vid;});recomputeRubro(rr1);render();}return;}
     if(a==="ver-expediente"){var rid0=t.dataset.rid;if(!rid0){state.rubros.forEach(function(rr){if(vendorById(rr,t.dataset.vid))rid0=rr.id;});}openModal(vendorExpedienteHTML(rid0,t.dataset.vid));return;}
-    if(a==="select-vendor"){var rr2=rubro(t.dataset.rid);var v2=rr2?vendorById(rr2,t.dataset.vid):null;if(rr2&&v2){rr2.selectedVendorId=v2.id;rr2.vendor=v2.name;rr2.comprometido=vendorQ(v2);rr2.status="contratado";closeModal();render();}return;}
+    if(a==="toggle-vendor"){var rr2=rubro(t.dataset.rid);var v2=rr2?vendorById(rr2,t.dataset.vid):null;if(rr2&&v2){v2.selected=!v2.selected;recomputeRubro(rr2);var inModal=document.getElementById("modal")&&document.getElementById("modal").style.display!=="none";if(inModal)closeModal();render();}return;}
     if(a==="fav-vendor"){var rr3=rubro(t.dataset.rid);var v3=rr3?vendorById(rr3,t.dataset.vid):null;if(v3){v3.fav=!v3.fav;render();}return;}
+    if(a==="free-space"){var n=0;state.rubros.forEach(function(r){(r.vendors||[]).forEach(function(v){if(v.proposal&&v.proposal.url){v.proposal.url=null;v.proposal.stored=false;n++;}});});if(n){alert("Se liberó el espacio de "+n+" PDF. Se conservó el nombre de cada propuesta como referencia; el archivo ya no ocupa lugar en el navegador.");storageFull=false;save();render();}return;}
     if(a==="upload-vprop"){uploadVendorProposal(t.dataset.rid,t.dataset.vid);return;}
     if(a==="view-vprop"){var rr4=rubro(t.dataset.rid);var v4=rr4?vendorById(rr4,t.dataset.vid):null;if(v4&&v4.proposal)openDataUrl(v4.proposal.url);return;}
     if(a==="remove-vprop"){var rr5=rubro(t.dataset.rid);var v5=rr5?vendorById(rr5,t.dataset.vid):null;if(v5){v5.proposal=null;render();openModal(vendorExpedienteHTML(t.dataset.rid,t.dataset.vid));}return;}
@@ -673,7 +685,7 @@
   });
   root.addEventListener("input",function(e){var t=e.target;var a=t.dataset.act;if(!a)return;
     if(a==="fx"){state.fx=+t.value||7.95;save();return;}
-    if(a==="v-name"||a==="v-amt"||a==="v-note"){var rr=rubro(t.dataset.rid);var v=rr?vendorById(rr,t.dataset.vid):null;if(v){if(a==="v-name")v.name=t.value;else if(a==="v-amt")v.amount=+t.value||0;else v.note=t.value;save();}return;}
+    if(a==="v-name"||a==="v-amt"||a==="v-note"){var rr=rubro(t.dataset.rid);var v=rr?vendorById(rr,t.dataset.vid):null;if(v){if(a==="v-name")v.name=t.value;else if(a==="v-amt")v.amount=+t.value||0;else v.note=t.value;recomputeRubro(rr);save();}return;}
     if(a==="techo"){var r=rubro(t.dataset.id);if(r){r.techo=+t.value||0;save();}return;}
     if(a==="rubro-name"){var rn=rubro(t.dataset.id);if(rn){rn.name=t.value;save();}return;}
     if(a==="pool-name"){var pn=state.pools.filter(function(x){return x.id===t.dataset.id;})[0];if(pn){pn.label=t.value;save();}return;}
@@ -685,9 +697,9 @@
     if(a==="aporte-name"||a==="aporte-date"||a==="aporte-amt"){var ap=state.aportes.filter(function(x){return x.id===t.dataset.id;})[0];if(ap){if(a==="aporte-name")ap.name=t.value;else if(a==="aporte-date")ap.date=t.value;else ap.amount=+t.value||0;save();}return;}
     var c=contrib();if(!c)return;if(a==="c-name"){c.name=t.value;save();return;}if(a==="c-ceil"){c.ceiling=+t.value||0;save();return;}var tr=t.closest("tr");if(!tr)return;var ins=c.installments.filter(function(x){return x.id===tr.dataset.iid;})[0];if(!ins)return;if(a==="ins-date"){ins.date=t.value;save();refreshAportesPeripherals();}if(a==="ins-planned"){ins.planned=+t.value||0;save();refreshAportesPeripherals();}if(a==="ins-paidamt"){ins.paidAmount=+t.value||0;ins.paid=(+ins.paidAmount>0);save();refreshAportesPeripherals();}});
   root.addEventListener("change",function(e){var t=e.target;var a=t.dataset.act;if(!a)return;
-    if(a==="fx"){render();return;}
-    if(a==="v-cur"){var rc=rubro(t.dataset.rid);var vc=rc?vendorById(rc,t.dataset.vid):null;if(vc){vc.currency=t.value;render();openModal(vendorExpedienteHTML(t.dataset.rid,t.dataset.vid));}return;}
-    if(a==="v-amt"){render();openModal(vendorExpedienteHTML(t.dataset.rid,t.dataset.vid));return;}
+    if(a==="fx"){state.rubros.forEach(function(r){recomputeRubro(r);});render();return;}
+    if(a==="v-cur"){var rc=rubro(t.dataset.rid);var vc=rc?vendorById(rc,t.dataset.vid):null;if(vc){vc.currency=t.value;recomputeRubro(rc);render();openModal(vendorExpedienteHTML(t.dataset.rid,t.dataset.vid));}return;}
+    if(a==="v-amt"){var ra=rubro(t.dataset.rid);if(ra)recomputeRubro(ra);render();openModal(vendorExpedienteHTML(t.dataset.rid,t.dataset.vid));return;}
     if(a==="pool"){var r=rubro(t.dataset.id);if(r){r.poolId=t.value;save();}return;}
     if(a==="ins-account"){var ca=contrib();if(ca){var tra=t.closest("tr");var insa=ca.installments.filter(function(x){return x.id===tra.dataset.iid;})[0];if(insa){insa.account=t.value||null;render();}}return;}
     if(a==="ins-filter"){insFilter=t.value;render();return;}
