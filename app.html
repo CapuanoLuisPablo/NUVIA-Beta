@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0F6E56">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Nuvia">
+<title>Nuvia · App</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --canvas:#F3F3EF; --surface:#FFFFFF; --raise:#FBFAF7;
+    --ink:#22201D; --ink2:#655F56; --ink3:#9B958B; --line:#E7E3DC;
+    --teal:#0F6E56; --teal-ink:#085041; --tint:#E1F5EE; --tint2:#EFF9F5;
+    --paid:#5F5E5A; --committed:#D9922E; --available:#7BAA4E; --over:#C0533F;
+    --warn-tint:#FBEEDA; --warn-ink:#8A5A12; --danger-tint:#FAE9E5; --danger-ink:#8A2F1E; --success-tint:#E8F1DD; --success-ink:#3E6D1E;
+    --r:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--canvas);color:var(--ink);font-family:"Figtree",system-ui,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;}
+  h1,h2,h3,h4{font-family:"Bricolage Grotesque",system-ui,sans-serif;letter-spacing:-0.01em;}
+  .num{font-variant-numeric:tabular-nums;}
+  input,button{font-family:inherit;font-size:14px;}
+  input{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 11px;color:var(--ink);width:100%;}
+  input:focus{outline:2px solid var(--teal);outline-offset:1px;}
+  .btn{border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:9px 14px;font-weight:500;cursor:pointer;color:var(--ink);}
+  .btn:hover{border-color:var(--ink3);}
+  .btn-primary{background:var(--teal);color:#fff;border:none;}
+  .btn-primary:hover{background:var(--teal-ink);}
+  .btn-primary:disabled{opacity:.6;cursor:default;}
+  .btn-ghost{background:none;border:none;color:var(--teal);cursor:pointer;font-weight:500;padding:6px 4px;}
+  .badge{font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;display:inline-block;white-space:nowrap;}
+  .b-teal{background:var(--tint);color:var(--teal-ink);}
+  .b-success{background:var(--success-tint);color:var(--success-ink);}
+  .b-warn{background:var(--warn-tint);color:var(--warn-ink);}
+  .b-danger{background:var(--danger-tint);color:var(--danger-ink);}
+  .b-neutral{background:var(--canvas);color:var(--ink2);border:1px solid var(--line);}
+
+  .topbar{background:var(--teal);color:#fff;padding:12px 22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;position:sticky;top:0;z-index:10;}
+  .mark{width:30px;height:30px;border-radius:8px;background:#fff;color:var(--teal);display:flex;align-items:center;justify-content:center;font-family:"Bricolage Grotesque";font-weight:700;font-size:18px;}
+  .wordmark{font-family:"Bricolage Grotesque";font-weight:700;font-size:20px;letter-spacing:1px;}
+  .tabs{display:flex;gap:2px;flex-wrap:wrap;}
+  .tab{border:none;background:none;color:rgba(255,255,255,.8);font-size:14px;padding:7px 13px;border-radius:999px;cursor:pointer;}
+  .tab:hover{color:#fff;}
+  .tab.active{background:rgba(255,255,255,.16);color:#fff;font-weight:500;}
+  .topmeta{margin-left:auto;text-align:right;font-size:12.5px;opacity:.95;}
+  .topmeta button{background:none;border:1px solid rgba(255,255,255,.45);color:#fff;border-radius:8px;padding:3px 9px;font-size:12px;cursor:pointer;margin-top:3px;}
+
+  .wrap{max-width:1120px;margin:0 auto;padding:22px;}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px;}
+  .soft{background:var(--raise);border:1px solid var(--line);border-radius:var(--r);padding:16px;}
+  .grid{display:grid;gap:14px;}
+  .g4{grid-template-columns:repeat(auto-fit,minmax(170px,1fr));}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr));}
+  .sec-title{display:flex;justify-content:space-between;align-items:center;margin:22px 0 12px;flex-wrap:wrap;gap:8px;}
+  .sec-title h2{font-size:19px;font-weight:600;}
+  .muted{color:var(--ink3);}
+  .small{font-size:12.5px;}
+  .kpi-label{font-size:12px;color:var(--ink3);margin-bottom:4px;}
+  .kpi-val{font-family:"Bricolage Grotesque";font-size:23px;font-weight:600;}
+  .kpi-sub{font-size:12px;color:var(--ink2);margin-top:2px;}
+  .bar{display:flex;height:12px;border-radius:999px;overflow:hidden;background:var(--canvas);margin-top:8px;}
+  .bar span{display:block;height:100%;}
+  .legend{display:flex;gap:15px;flex-wrap:wrap;font-size:12px;color:var(--ink2);margin-top:8px;}
+  .dot{width:9px;height:9px;border-radius:3px;display:inline-block;margin-right:5px;vertical-align:1px;}
+  .ic{width:36px;height:36px;border-radius:9px;background:var(--tint);color:var(--teal-ink);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+  .rubro-row{border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;background:var(--surface);}
+  .rubro-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .rubro-head .nm{font-weight:600;font-size:15px;}
+  .rubro-head .right{margin-left:auto;text-align:right;}
+  .quote{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 0;border-top:1px dashed var(--line);font-size:14px;}
+  .quote .amt{margin-left:auto;font-weight:600;}
+  table{width:100%;border-collapse:collapse;}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink3);font-weight:600;padding:6px 8px;}
+  td{padding:8px;border-top:1px solid var(--line);font-size:14px;vertical-align:top;}
+  td.r,th.r{text-align:right;}
+  .scroll{overflow-x:auto;}
+  details{border:1px solid var(--line);border-radius:11px;background:var(--surface);margin-bottom:9px;}
+  details summary{list-style:none;cursor:pointer;padding:12px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  details summary::-webkit-details-marker{display:none;}
+  details .inner{padding:0 14px 12px;}
+  .alert{padding:10px 13px;border-radius:10px;font-size:13.5px;margin-bottom:8px;}
+  .alert-warn{background:var(--warn-tint);color:var(--warn-ink);}
+  .alert-danger{background:var(--danger-tint);color:var(--danger-ink);}
+  .alert-ok{background:var(--tint);color:var(--teal-ink);}
+  .footer{max-width:1120px;margin:0 auto;padding:14px 22px 44px;color:var(--ink3);font-size:12px;}
+
+  .auth{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:22px;}
+  .auth .card{max-width:380px;width:100%;}
+  .auth h1{font-size:22px;margin:14px 0 4px;}
+  .auth .fld{margin-top:12px;}
+  .auth label{font-size:12px;color:var(--ink2);display:block;margin-bottom:4px;}
+  .msg{font-size:13px;margin-top:10px;}
+  .msg.err{color:var(--danger-ink);} .msg.ok{color:var(--teal-ink);}
+  .loading{padding:60px 22px;text-align:center;color:var(--ink3);}
+</style>
+</head>
+<body>
+<div id="root"><div class="loading">Cargando Nuvia…</div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+  "use strict";
+
+  // ── Conexión (la llave publishable está hecha para ir en el navegador; la seguridad la ponen las reglas de la base) ──
+  var SUPABASE_URL = "https://jdrbztaeuqtkiqptvgwl.supabase.co";
+  var SUPABASE_KEY = "sb_publishable__6xl8QoFt0-pDBlDpDS8kQ_abW8rSYQ";
+  var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  var root = document.getElementById("root");
+  var S = { view: "inicio", sesion: null, d: {}, recovering: false };
+
+  // ── Utilidades ──
+  function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]; }); }
+  function Q(minor){ if (minor == null) return "—"; return "Q" + (Number(minor)/100).toLocaleString("es-GT", {minimumFractionDigits:2, maximumFractionDigits:2}); }
+  function fecha(d){ if (!d) return "—"; var p = String(d).slice(0,10).split("-"); var m = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"]; return Number(p[2]) + " " + m[Number(p[1])-1] + " " + p[0]; }
+  function pct(a, b){ if (!b) return 0; return Math.max(0, Math.min(100, a / b * 100)); }
+  var ETAPA = { negociando:["Negociando","b-warn"], ajustes_propuesta:["Ajustes de propuesta","b-warn"], contratado:["Contratado","b-success"], rechazado:["Rechazado","b-danger"] };
+  function etapa(e){ var x = ETAPA[e] || [e, "b-neutral"]; return '<span class="badge ' + x[1] + '">' + esc(x[0]) + "</span>"; }
+  function estadoBadge(e){
+    var map = { "al día":"b-success", "pagado":"b-success", "cubierta":"b-success", "atrasado":"b-danger", "vencida":"b-danger",
+                "parcial":"b-warn", "sin plan":"b-neutral", "sin calendario":"b-neutral", "pendiente":"b-neutral",
+                "registrada":"b-success", "confirmada":"b-teal", "por confirmar":"b-warn" };
+    return '<span class="badge ' + (map[e] || "b-neutral") + '">' + esc(e) + "</span>";
+  }
+  function isOwner(){ return S.sesion && S.sesion.rol === "owner"; }
+
+  // ── Pantallas de acceso ──
+  function renderLogin(msg, isErr){
+    root.innerHTML =
+      '<div class="auth"><div class="card">' +
+        '<span class="mark" style="background:var(--teal);color:#fff">N</span>' +
+        '<h1>Entrar a Nuvia</h1><p class="muted small">Solo usuarios autorizados por los novios.</p>' +
+        '<form id="fLogin">' +
+          '<div class="fld"><label for="em">Correo</label><input id="em" type="email" autocomplete="username" required></div>' +
+          '<div class="fld"><label for="pw">Contraseña</label><input id="pw" type="password" autocomplete="current-password" required></div>' +
+          '<div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
+            '<button class="btn btn-primary" type="submit" id="bLogin">Entrar</button>' +
+            '<button class="btn-ghost" type="button" id="bForgot">¿Olvidaste tu contraseña?</button>' +
+          '</div>' +
+          '<div class="msg ' + (isErr ? "err" : "ok") + '" id="mLogin">' + (msg ? esc(msg) : "") + '</div>' +
+        '</form>' +
+      '</div></div>';
+    document.getElementById("fLogin").onsubmit = async function(e){
+      e.preventDefault();
+      var b = document.getElementById("bLogin"), m = document.getElementById("mLogin");
+      b.disabled = true; m.className = "msg"; m.textContent = "Entrando…";
+      var r = await sb.auth.signInWithPassword({ email: document.getElementById("em").value.trim(), password: document.getElementById("pw").value });
+      b.disabled = false;
+      if (r.error){ m.className = "msg err"; m.textContent = "No se pudo entrar: revisa tu correo y contraseña."; return; }
+      start();
+    };
+    document.getElementById("bForgot").onclick = async function(){
+      var em = document.getElementById("em").value.trim(), m = document.getElementById("mLogin");
+      if (!em){ m.className = "msg err"; m.textContent = "Escribe primero tu correo."; return; }
+      var r = await sb.auth.resetPasswordForEmail(em, { redirectTo: location.origin + location.pathname });
+      if (r.error){ m.className = "msg err"; m.textContent = "No se pudo enviar el correo: " + r.error.message; return; }
+      m.className = "msg ok"; m.textContent = "Te enviamos un correo. Abre el enlace en este mismo navegador para elegir tu nueva contraseña.";
+    };
+  }
+
+  function renderNewPassword(){
+    root.innerHTML =
+      '<div class="auth"><div class="card">' +
+        '<span class="mark" style="background:var(--teal);color:#fff">N</span>' +
+        '<h1>Elige tu nueva contraseña</h1><p class="muted small">Mínimo 8 caracteres.</p>' +
+        '<form id="fPw">' +
+          '<div class="fld"><label for="p1">Nueva contraseña</label><input id="p1" type="password" autocomplete="new-password" minlength="8" required></div>' +
+          '<div class="fld"><label for="p2">Repítela</label><input id="p2" type="password" autocomplete="new-password" minlength="8" required></div>' +
+          '<div style="margin-top:16px"><button class="btn btn-primary" type="submit" id="bPw">Guardar contraseña</button></div>' +
+          '<div class="msg" id="mPw"></div>' +
+        '</form>' +
+      '</div></div>';
+    document.getElementById("fPw").onsubmit = async function(e){
+      e.preventDefault();
+      var p1 = document.getElementById("p1").value, p2 = document.getElementById("p2").value, m = document.getElementById("mPw");
+      if (p1.length < 8){ m.className = "msg err"; m.textContent = "Usa al menos 8 caracteres."; return; }
+      if (p1 !== p2){ m.className = "msg err"; m.textContent = "Las dos contraseñas no coinciden."; return; }
+      document.getElementById("bPw").disabled = true;
+      var r = await sb.auth.updateUser({ password: p1 });
+      if (r.error){ document.getElementById("bPw").disabled = false; m.className = "msg err"; m.textContent = "No se pudo guardar: " + r.error.message; return; }
+      S.recovering = false;
+      history.replaceState(null, "", location.pathname);
+      start();
+    };
+  }
+
+  // ── Carga de datos (solo vistas nuvia_* de la "ventanilla") ──
+  async function q(view, order){
+    var req = sb.from(view).select("*").eq("workspace_id", S.sesion.workspace_id);
+    if (order) req = req.order(order.col, { ascending: order.asc !== false });
+    var r = await req;
+    if (r.error) throw new Error(view + ": " + r.error.message);
+    return r.data || [];
+  }
+
+  async function start(){
+    if (S.recovering) return renderNewPassword();
+    var s = await sb.auth.getSession();
+    if (!s.data.session) return renderLogin();
+    root.innerHTML = '<div class="loading">Cargando tus datos…</div>';
+    try {
+      var me = await sb.from("nuvia_mi_sesion").select("*");
+      if (me.error) throw new Error(me.error.message);
+      if (!me.data || !me.data.length){
+        root.innerHTML = '<div class="auth"><div class="card"><h1>Sin acceso</h1><p class="muted" style="margin-top:6px">Tu usuario existe, pero todavía no está ligado a ninguna boda. Pide a los novios que te den acceso.</p><div style="margin-top:14px"><button class="btn" id="bOut">Salir</button></div></div></div>';
+        document.getElementById("bOut").onclick = salir; return;
+      }
+      S.sesion = me.data[0];
+      var res = await Promise.all([
+        q("nuvia_bolsas"), q("nuvia_rubros", {col:"orden"}), q("nuvia_cotizaciones"), q("nuvia_proveedores"),
+        q("nuvia_aportantes"), q("nuvia_cuotas", {col:"fecha"}), q("nuvia_saldos"), q("nuvia_cuentas"),
+        q("nuvia_boletas", {col:"fecha", asc:false}), q("nuvia_historial", {col:"cuando", asc:false})
+      ]);
+      S.d = { bolsas:res[0], rubros:res[1], cotiz:res[2], prov:res[3], aport:res[4], cuotas:res[5], saldos:res[6], cuentas:res[7], boletas:res[8], hist:res[9] };
+      render();
+    } catch (err) {
+      root.innerHTML = '<div class="auth"><div class="card"><h1>Algo falló</h1><p class="msg err">' + esc(err.message) + '</p><div style="margin-top:14px;display:flex;gap:8px"><button class="btn" id="bRetry">Reintentar</button><button class="btn" id="bOut">Salir</button></div></div></div>';
+      document.getElementById("bRetry").onclick = start;
+      document.getElementById("bOut").onclick = salir;
+    }
+  }
+
+  async function salir(){ await sb.auth.signOut(); S.sesion = null; S.d = {}; renderLogin("Sesión cerrada.", false); }
+
+  // ── Armazón ──
+  function render(){
+    var tabs = [["inicio","Inicio"],["rubros","Rubros"],["proveedores","Proveedores"]];
+    if (isOwner()) tabs.splice(2, 0, ["aportes","Aportes"]);
+    tabs.push(["boletas","Boletas"], ["historial","Historial"]);
+    if (!tabs.some(function(t){ return t[0] === S.view; })) S.view = "inicio";
+    var dias = S.sesion.fecha_evento ? Math.ceil((new Date(S.sesion.fecha_evento + "T00:00:00") - new Date()) / 864e5) : null;
+    root.innerHTML =
+      '<div class="topbar"><span class="mark">N</span><span class="wordmark">NUVIA</span>' +
+        '<div class="tabs">' + tabs.map(function(t){ return '<button class="tab' + (S.view === t[0] ? " active" : "") + '" data-view="' + t[0] + '">' + t[1] + "</button>"; }).join("") + "</div>" +
+        '<div class="topmeta"><div style="font-weight:600">' + esc(S.sesion.boda) + "</div>" +
+          "<div>" + (dias != null ? "Faltan " + dias + " días · " + fecha(S.sesion.fecha_evento) : "") + "</div>" +
+          "<div>" + esc(S.sesion.nombre) + " · " + esc(S.sesion.rol) + ' <button id="bOut">Salir</button></div></div>' +
+      "</div>" +
+      '<main class="wrap">' + VIEWS[S.view]() + "</main>" +
+      '<div class="footer">Conectado a Supabase · <strong>solo lectura</strong> (entrega 1). Para registrar boletas y pagos sigue usando el prototipo mientras armamos la entrega 2.</div>';
+    root.querySelectorAll(".tab").forEach(function(b){ b.onclick = function(){ S.view = b.getAttribute("data-view"); render(); window.scrollTo(0,0); }; });
+    document.getElementById("bOut").onclick = salir;
+  }
+
+  // ── Vistas ──
+  var VIEWS = {
+    inicio: function(){
+      var d = S.d, h = "";
+      var boda = d.bolsas.filter(function(b){ return b.kind === "boda"; })[0] || d.bolsas[0];
+      if (boda){
+        var brecha = boda.brecha_minor;
+        h += '<div class="sec-title" style="margin-top:0"><h2>' + esc(boda.bolsa) + '</h2><span class="muted small">Meta ' + esc(boda.meta_origen) + "</span></div>";
+        h += '<div class="grid g4">' +
+          kpi("Meta", Q(boda.meta_minor), boda.contratos_por_confirmar ? boda.contratos_por_confirmar + " contrato(s) por confirmar" : "Todo confirmado") +
+          (isOwner() ? kpi("Prometido", Q(boda.prometido_minor), "En plan " + Q(boda.en_plan_minor)) : "") +
+          (isOwner() ? kpi(brecha > 0 ? "Falta conseguir" : "Colchón", Q(Math.abs(brecha)), brecha > 0 ? "Meta − prometido" : "Prometido por encima de la meta") : "") +
+          kpi("Pagado a proveedores", Q(boda.pagado_minor), isOwner() ? "Aportado " + Q(boda.aportado_minor) : "") +
+        "</div>";
+      }
+      var otras = d.bolsas.filter(function(b){ return b !== boda; });
+      if (otras.length){
+        h += '<div class="sec-title"><h2>Otras bolsas</h2></div><div class="grid g2">' + otras.map(function(b){
+          return '<div class="card"><div style="font-weight:600">' + esc(b.bolsa) + '</div>' +
+            '<div class="small muted" style="margin-top:4px">Meta ' + Q(b.meta_minor) + " (" + esc(b.meta_origen) + ")" +
+            (isOwner() ? " · Prometido " + Q(b.prometido_minor) + " · Aportado " + Q(b.aportado_minor) : "") + "</div></div>";
+        }).join("") + "</div>";
+      }
+      // Alertas
+      var al = [];
+      d.rubros.forEach(function(r){ if (r.alerta === "sobre el techo") al.push(['danger', esc(r.rubro) + ": lo contratado (" + Q(r.contratado_minor) + ") supera el techo (" + Q(r.techo_minor) + ")."]); });
+      var pc = d.cotiz.filter(function(c){ return c.etapa === "contratado" && !c.monto_confirmado; });
+      if (pc.length) al.push(['warn', "Confirma el monto final (¿factura? ¿incluye IVA?) de: " + pc.map(function(c){ return esc(c.proveedor); }).join(", ") + "."]);
+      var neg = d.cotiz.filter(function(c){ return c.etapa === "negociando" || c.etapa === "ajustes_propuesta"; });
+      if (neg.length) al.push(['warn', "En negociación: " + neg.map(function(c){ return esc(c.proveedor) + " (" + Q(c.monto_minor) + ")"; }).join(", ") + "."]);
+      if (isOwner()){
+        var venc = d.cuotas.filter(function(c){ return c.estado === "vencida"; });
+        if (venc.length) al.push(['warn', venc.length + " cuotas de aportantes aparecen vencidas. Es normal mientras no carguemos el historial de boletas."]);
+      }
+      h += '<div class="sec-title"><h2>Pendientes y alertas</h2></div>';
+      h += al.length ? al.map(function(a){ return '<div class="alert alert-' + a[0] + '">' + a[1] + "</div>"; }).join("") : '<div class="alert alert-ok">Sin pendientes.</div>';
+      // Próximas cuotas (owner)
+      if (isOwner()){
+        var hoy = new Date().toISOString().slice(0,10);
+        var prox = d.cuotas.filter(function(c){ return c.fecha >= hoy && c.estado !== "cubierta"; }).slice(0, 6);
+        if (prox.length){
+          h += '<div class="sec-title"><h2>Próximas cuotas de aportantes</h2></div><div class="card scroll"><table><tr><th>Fecha</th><th>Aportante</th><th>Bolsa</th><th class="r">Monto</th></tr>' +
+            prox.map(function(c){ return "<tr><td>" + fecha(c.fecha) + "</td><td>" + esc(c.aportante) + "</td><td>" + esc(c.bolsa) + '</td><td class="r num">' + Q(c.monto_minor) + "</td></tr>"; }).join("") + "</table></div>";
+        }
+      }
+      return h;
+      function kpi(l, v, s){ return '<div class="card"><div class="kpi-label">' + esc(l) + '</div><div class="kpi-val num">' + v + "</div>" + (s ? '<div class="kpi-sub">' + esc(s) + "</div>" : "") + "</div>"; }
+    },
+
+    rubros: function(){
+      var d = S.d;
+      return '<div class="sec-title" style="margin-top:0"><h2>Rubros</h2><span class="legend" style="margin:0"><span><i class="dot" style="background:var(--paid)"></i>Pagado</span><span><i class="dot" style="background:var(--committed)"></i>Contratado por pagar</span><span><i class="dot" style="background:var(--available)"></i>Disponible del techo</span></span></div>' +
+        d.rubros.map(function(r){
+          var techo = r.techo_minor || 0, con = r.contratado_minor || 0, pag = r.pagado_minor || 0;
+          var base = Math.max(techo, con, 1);
+          var pendiente = Math.max(con - pag, 0), disp = Math.max(techo - con, 0);
+          var cot = d.cotiz.filter(function(c){ return c.budget_line_id === r.budget_line_id; });
+          return '<div class="rubro-row"><div class="rubro-head">' +
+              '<div class="ic">' + esc(r.icono || "•") + '</div>' +
+              '<div><div class="nm">' + esc(r.rubro) + '</div><div class="small muted">' + esc(r.responsables ? "Responsable: " + r.responsables : "Sin responsable") + "</div></div>" +
+              '<div class="right"><div class="num" style="font-weight:600">' + Q(con) + ' <span class="muted small">de ' + Q(techo) + "</span></div>" +
+                (r.alerta === "sobre el techo" ? '<span class="badge b-danger">Sobre el techo</span>' : (con ? '<span class="badge b-teal">Dentro del techo</span>' : '<span class="badge b-neutral">Por definir</span>')) +
+              "</div></div>" +
+            '<div class="bar"><span style="width:' + pct(pag, base) + '%;background:var(--paid)"></span><span style="width:' + pct(pendiente, base) + '%;background:var(--committed)"></span><span style="width:' + pct(disp, base) + '%;background:var(--available)"></span></div>' +
+            (cot.length ? cot.map(function(c){
+              return '<div class="quote"><span>' + esc(c.proveedor) + "</span>" + etapa(c.etapa) +
+                (c.etapa === "contratado" ? (c.monto_confirmado ? '<span class="badge b-success">Monto confirmado</span>' : '<span class="badge b-warn">Por confirmar</span>') : "") +
+                (c.notes ? '<span class="small muted">' + esc(c.notes) + "</span>" : "") +
+                '<span class="amt num">' + Q(c.monto_minor) + "</span></div>";
+            }).join("") : '<div class="quote muted small">Sin cotizaciones todavía.</div>') +
+          "</div>";
+        }).join("");
+    },
+
+    aportes: function(){
+      var d = S.d;
+      return '<div class="sec-title" style="margin-top:0"><h2>Aportantes</h2><span class="muted small">Lo depositado sale del libro; hoy está en cero hasta cargar el historial.</span></div>' +
+        d.aport.map(function(a){
+          var cs = d.cuotas.filter(function(c){ return c.pledge_id === a.pledge_id; });
+          return "<details><summary>" +
+              '<strong>' + esc(a.aportante) + '</strong><span class="small muted">' + esc(a.bolsa || "") + "</span>" + estadoBadge(a.estado) +
+              '<span style="margin-left:auto" class="small num">Techo ' + Q(a.techo_minor) + " · En plan " + Q(a.en_plan_minor) + " · Depositado " + Q(a.depositado_minor) + "</span>" +
+            '</summary><div class="inner scroll">' +
+              (cs.length ? "<table><tr><th>#</th><th>Fecha</th><th class=\"r\">Monto</th><th class=\"r\">Acumulado</th><th>Estado</th></tr>" +
+                cs.map(function(c){ return "<tr><td>" + c.seq + "</td><td>" + fecha(c.fecha) + '</td><td class="r num">' + Q(c.monto_minor) + '</td><td class="r num">' + Q(c.acumulado_minor) + "</td><td>" + estadoBadge(c.estado) + "</td></tr>"; }).join("") + "</table>"
+                : '<p class="muted small">Sin cuotas.</p>') +
+            "</div></details>";
+        }).join("") +
+        (d.saldos.length ? '<div class="sec-title"><h2>Saldos por cuenta</h2></div><div class="card scroll"><table><tr><th>Aportante</th><th>Cuenta</th><th class="r">Depositado</th><th class="r">Usado</th><th class="r">Disponible</th></tr>' +
+          d.saldos.map(function(s){ return "<tr><td>" + esc(s.aportante) + "</td><td>" + esc(s.cuenta) + '</td><td class="r num">' + Q(s.depositado_minor) + '</td><td class="r num">' + Q(s.usado_minor) + '</td><td class="r num">' + Q(s.disponible_minor) + "</td></tr>"; }).join("") + "</table></div>" : "");
+    },
+
+    proveedores: function(){
+      var d = S.d;
+      return '<div class="sec-title" style="margin-top:0"><h2>Contratos</h2></div><div class="card scroll"><table><tr><th>Proveedor</th><th>Rubro</th><th class="r">Monto</th><th>Confirmación</th><th class="r">Pagado</th><th class="r">Saldo</th><th>Estado</th><th>Próxima</th></tr>' +
+        d.prov.map(function(p){
+          return "<tr><td>" + esc(p.proveedor) + "</td><td>" + esc(p.rubro) + '</td><td class="r num">' + Q(p.monto_minor) + "</td><td>" +
+            (p.monto_confirmado ? '<span class="badge b-success">Confirmado</span>' : '<span class="badge b-warn">Por confirmar</span>') +
+            '</td><td class="r num">' + Q(p.pagado_minor) + '</td><td class="r num">' + Q(p.saldo_minor) + "</td><td>" + estadoBadge(p.estado) + "</td><td>" + fecha(p.proxima_fecha) + "</td></tr>";
+        }).join("") + "</table></div>" +
+        '<p class="small muted" style="margin-top:8px">"Sin calendario" = aún no cargamos las fechas de pago de ese proveedor.</p>';
+    },
+
+    boletas: function(){
+      var d = S.d;
+      if (!d.boletas.length) return '<div class="sec-title" style="margin-top:0"><h2>Boletas</h2></div><div class="alert alert-ok">Todavía no hay boletas en la base. En la entrega 2 vas a poder subirlas desde aquí.</div>';
+      return '<div class="sec-title" style="margin-top:0"><h2>Boletas</h2></div><div class="card scroll"><table><tr><th>Fecha</th><th>Tipo</th><th>De / para</th><th>Cuenta</th><th class="r">Monto</th><th>Estado</th></tr>' +
+        d.boletas.map(function(b){ return "<tr><td>" + fecha(b.fecha) + "</td><td>" + esc(b.tipo) + "</td><td>" + esc(b.depositante) + "</td><td>" + esc(b.cuenta) + '</td><td class="r num">' + Q(b.monto_minor) + "</td><td>" + estadoBadge(b.estado) + "</td></tr>"; }).join("") + "</table></div>";
+    },
+
+    historial: function(){
+      var d = S.d;
+      var CAMPO = { techo:"Techo", estado:"Estado", creado:"Creado", monto:"Monto", etapa:"Etapa", monto_confirmado:"Monto confirmado" };
+      function val(campo, v){ if (v == null) return "—"; if (campo === "techo" || campo === "monto") return Q(v); if (v === "true") return "sí"; if (v === "false") return "no"; return esc(v); }
+      return '<div class="sec-title" style="margin-top:0"><h2>Historial de cambios</h2></div><div class="card scroll"><table><tr><th>Cuándo</th><th>Rubro</th><th>Qué</th><th>Antes</th><th>Después</th><th>Quién</th></tr>' +
+        d.hist.map(function(c){ return "<tr><td>" + fecha(c.cuando) + "</td><td>" + esc(c.rubro) + "</td><td>" + esc((CAMPO[c.campo] || c.campo) + " (" + c.que + ")") + "</td><td>" + val(c.campo, c.antes) + "</td><td>" + val(c.campo, c.despues) + "</td><td>" + esc(c.quien) + "</td></tr>"; }).join("") + "</table></div>";
+    }
+  };
+
+  // ── Arranque y recuperación de contraseña ──
+  if (/type=recovery/.test(location.hash)) S.recovering = true;
+  sb.auth.onAuthStateChange(function(event){
+    if (event === "PASSWORD_RECOVERY"){ S.recovering = true; renderNewPassword(); }
+  });
+  start();
+})();
+</script>
+</body>
+</html>
